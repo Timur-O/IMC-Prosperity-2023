@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from datamodel import OrderDepth, TradingState, Order, Position
 
 
@@ -159,8 +159,8 @@ class Trader:
             sorted_asks = sorted(set(order_depth.sell_orders.keys()))
             sorted_bids = sorted(set(order_depth.buy_orders.keys()), reverse=True)
 
-            historicalBestAsk = self.historicalBestAsk[product]
-            historicalBestBid = self.historicalBestAsk[product]
+            # historicalBestAsk = self.historicalBestAsk[product]
+            # historicalBestBid = self.historicalBestAsk[product]
             historicalPrice = self.historicalPrice[product]
             historicalOBV = self.historicalOBV[product]
 
@@ -225,7 +225,6 @@ class Trader:
                         # Imbalance > 1 => Price Up, Current OBV Gradient > OBV Average => BUY
                         best_ask = min(order_depth.sell_orders.keys())
                         best_ask_volume = max(order_depth.sell_orders[best_ask], -max_change_buy)
-
                         print("BUY", str(-best_ask_volume) + " BANANAS", best_ask)
                         orders.append(Order(product, best_ask, -best_ask_volume))
                         # Increment Counter
@@ -249,16 +248,17 @@ class Trader:
 
                 moving_average = 0
                 overall_direction = 0
-                curr_prices = []
+                standard_deviation = 0
+
                 if len(historicalPrice) >= N_2:
                     moving_average = np.mean(historicalPrice[-N_2:])
                     curr_prices = historicalPrice[-N:]
                     overall_direction = np.gradient(historicalPrice[-N:])[-1]
+                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
+                    standard_deviation = np.std(curr_prices_minus_mean)
 
                 # If any SELL orders and position limits allow buying
                 if (num_sell > 0) and (position < limit) and (overall_direction > 0):
-                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
-                    standard_deviation = np.std(curr_prices_minus_mean)
                     lower_band = moving_average - (K * standard_deviation)
 
                     best_ask = sorted_asks[0]
@@ -274,8 +274,6 @@ class Trader:
 
                 # If any BUY orders and position limits allow selling
                 if (num_buy > 0) and (position > -limit) and (overall_direction < 0):
-                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
-                    standard_deviation = np.std(curr_prices_minus_mean)
                     upper_band = moving_average + (K * standard_deviation)
 
                     best_bid = sorted_bids[0]
@@ -295,16 +293,17 @@ class Trader:
 
                 moving_average = 0
                 overall_direction = 0
-                curr_prices = []
+                standard_deviation = 0
+
                 if len(historicalPrice) >= N_2:
                     moving_average = np.mean(historicalPrice[-N_2:])
                     curr_prices = historicalPrice[-N:]
                     overall_direction = np.gradient(historicalPrice[-N:])[-1]
+                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
+                    standard_deviation = np.std(curr_prices_minus_mean)
 
                 # If any SELL orders and position limits allow buying
                 if (num_sell > 0) and (position < limit) and (overall_direction > 0):
-                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
-                    standard_deviation = np.std(curr_prices_minus_mean)
                     lower_band = moving_average - (K * standard_deviation)
 
                     best_ask = sorted_asks[0]
@@ -320,8 +319,6 @@ class Trader:
 
                 # If any BUY orders and position limits allow selling
                 if (num_buy > 0) and (position > -limit) and (overall_direction < 0):
-                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
-                    standard_deviation = np.std(curr_prices_minus_mean)
                     upper_band = moving_average + (K * standard_deviation)
 
                     best_bid = sorted_bids[0]
