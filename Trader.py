@@ -60,7 +60,7 @@ class Trader:
         # Initialize the method output dict as an empty dict
         result = {}
 
-        # Calculate product values
+        # Calculate and keep track of product values
         for product in state.order_depths.keys():
             # All Buy and Sell Orders for Product
             order_depth: OrderDepth = state.order_depths[product]
@@ -91,52 +91,73 @@ class Trader:
 
             self.historicalOBV[product].append(newOBV)
 
-        # # Calculate Historical Ratios for Coconuts and Pina Coladas
-        # time_to_consider_pc_c = 100
-        # z_score_pc_c_threshold = 2
-        #
-        # pina_colada_amount = 0
-        # coconut_amount = 0
-        #
-        # coconut_price = self.historicalPrice['COCONUTS'][-1]
-        # pina_colada_price = self.historicalPrice['PINA_COLADA'][-1]
-        # current_pc_to_c_ratio = pina_colada_price / coconut_price
-        # self.historicalPCtoCRatio.append(current_pc_to_c_ratio)
-        #
-        # if len(self.historicalPCtoCRatio) >= time_to_consider_pc_c:
-        #     correlation_coefficient = np.corrcoef(self.historicalPrice['COCONUTS'][-time_to_consider_pc_c:], self.historicalPrice['PINA_COLADAS'][-time_to_consider_pc_c:])
-        #     std_pina_colada = np.std(self.historicalPrice['PINA_COLADAS'][-time_to_consider_pc_c:])
-        #     std_coconuts = np.std(self.historicalPrice['COCONUTS'][-time_to_consider_pc_c:])
-        #
-        #     historical_pc_to_c_average = np.mean(self.historicalPCtoCRatio[-time_to_consider_pc_c:])
-        #     historical_pc_to_c_std = np.std(self.historicalPCtoCRatio[-time_to_consider_pc_c:])
-        #     z_score_pc_c = (current_pc_to_c_ratio - historical_pc_to_c_average) / historical_pc_to_c_std
-        #
-        #     historical_pc_price = self.historicalPrice['PINA_COLADAS'][-time_to_consider_pc_c:]
-        #     historical_c_price = self.historicalPrice['COCONUTS'][-time_to_consider_pc_c:]
-        #     historical_mean_pc_price = np.mean(historical_pc_price)
-        #     historical_mean_c_price = np.mean(historical_c_price)
-        #
-        #     if z_score_pc_c > z_score_pc_c_threshold:
-        #         # Pina Coladas are overpriced => Sell or Coconuts are underpriced => Buy
-        #         hedge_ratio = (correlation_coefficient * std_pina_colada) / std_coconuts
-        #         spread = pina_colada_price - coconut_price
-        #
-        #         if pina_colada_price > historical_mean_pc_price:
-        #             # Pina Coladas Overpriced => Sell, Short
-        #             pina_colada_amount = -
-        #         elif coconut_price < historical_mean_c_price:
-        #             # Coconuts are Underpriced => Buy, Long
-        #             coconut_amount =
-        #
-        #     elif z_score_pc_c < -z_score_pc_c_threshold:
-        #         # Pina Coladas are underpriced => Buy or Coconuts are overpriced => Sell
-        #         if pina_colada_price < historical_mean_pc_price:
-        #             # Pina Coladas Underpriced => Buy
-        #             pina_colada_amount =
-        #         elif coconut_price > historical_mean_c_price:
-        #             # Coconuts are Overpriced => Sell
-        #             coconut_amount = -
+        # Pair Trading w/ Z-Score for Coconuts and Pina Coladas
+        pina_colada_amount: int = 0
+        coconut_amount: int = 0
+
+        if ('COCONUTS' in state.order_depths.keys()) and ('PINA_COLADAS' in state.order_depths.keys()):
+            time_to_consider: int = 20000
+            z_score_entry_threshold: float = 2
+            z_score_exit_threshold: float = 1
+
+            # Get Current Positions
+            try:
+                coconut_position: Position = state.position['COCONUTS']
+            except KeyError:
+                coconut_position: Position = Position(0)
+
+            try:
+                pina_colada_position: Position = state.position['PINA_COLADAS']
+            except KeyError:
+                pina_colada_position: Position = Position(0)
+
+            coconut_price: float = self.historicalPrice['COCONUTS'][-1]
+            pina_colada_price: float = self.historicalPrice['PINA_COLADAS'][-1]
+
+            coconut_limit: int = self.limits['COCONUTS']
+            coconut_max_change_buy: int = coconut_limit - coconut_position
+            coconut_max_change_sell: int = -coconut_limit - coconut_position  # -- => +
+            pina_colada_limit: int = self.limits['PINA_COLADAS']
+            pina_colada_max_change_buy: int = pina_colada_limit - pina_colada_position
+            pina_colada_max_change_sell: int = -pina_colada_limit - pina_colada_position  # -- => +
+
+            # Calculate and Keep Track of the Ratio
+            current_ratio = pina_colada_price / coconut_price
+            self.historicalPCtoCRatio.append(current_ratio)
+
+            print("Z", current_ratio)
+
+            if len(self.historicalPCtoCRatio) >= time_to_consider:
+                historical_ratio_average = np.mean(self.historicalPCtoCRatio[-time_to_consider:])
+                historical_ratio_std = np.std(self.historicalPCtoCRatio[-time_to_consider:])
+                z_score_pc_c = (current_ratio - historical_ratio_average) / historical_ratio_std
+
+                historical_pc_price = self.historicalPrice['PINA_COLADAS'][-time_to_consider:]
+                historical_c_price = self.historicalPrice['COCONUTS'][-time_to_consider:]
+                historical_mean_pc_price = np.mean(historical_pc_price)
+                historical_mean_c_price = np.mean(historical_c_price)
+
+                # Exit Position if Ratio is Normalized
+                if -z_score_exit_threshold <= z_score_pc_c <= z_score_exit_threshold:
+                    coconut_amount = -coconut_position
+                    pina_colada_amount = -pina_colada_position
+                # Enter Position if Ratio is Above Threshold
+                elif z_score_pc_c > z_score_entry_threshold:
+                    if pina_colada_price > historical_mean_pc_price:
+                        # Pina Coladas Overpriced => Sell, Short
+                        pina_colada_amount = max(pina_colada_max_change_sell, -round(coconut_max_change_buy * current_ratio))
+                    elif coconut_price < historical_mean_c_price:
+                        # Coconuts are Underpriced => Buy, Long
+                        coconut_amount = min(coconut_max_change_buy, round(pina_colada_max_change_sell / current_ratio))
+                # Enter Position if Ratio is Below Threshold
+                elif z_score_pc_c < -z_score_entry_threshold:
+                    # Pina Coladas are underpriced => Buy or Coconuts are overpriced => Sell
+                    if pina_colada_price < historical_mean_pc_price:
+                        # Pina Coladas Underpriced => Buy
+                        pina_colada_amount = min(pina_colada_max_change_buy, round(coconut_max_change_sell * current_ratio))
+                    elif coconut_price > historical_mean_c_price:
+                        # Coconuts are Overpriced => Sell
+                        coconut_amount = max(coconut_max_change_sell, -round(pina_colada_max_change_buy / current_ratio))
 
         # Iterate over all the available products contained in the order depths
         for product in state.order_depths.keys():
@@ -208,16 +229,18 @@ class Trader:
                             break
             # Simple Price Direction Indication via Orders for Bananas
             elif product == 'BANANAS':
+                history_length: int = 30000
+
                 if (len(order_depth.buy_orders) > 0) and \
                    (len(order_depth.sell_orders) > 0) and \
-                   (len(historicalOBV) >= 500):
+                   (len(historicalOBV) >= history_length):
                     # Imbalance Ratio
                     imbalance_ratio = sum(order_depth.buy_orders.values()) / abs(sum(order_depth.sell_orders.values()))
                     imbalance_threshold = 1
 
                     # Gradient of OBV
                     obv_gradient = np.gradient(historicalOBV)[-1]
-                    obv_average = np.mean(historicalOBV[-500])
+                    obv_average = np.mean(historicalOBV[-history_length])
 
                     if (imbalance_ratio > imbalance_threshold) and \
                        (obv_gradient > obv_average) and \
@@ -240,10 +263,30 @@ class Trader:
                         orders.append(Order(product, best_bid, -best_bid_volume))
                         # Increment Counter
                         max_change_sell += best_bid_volume
+            # Pairs Trading - Executing Trades Based on Calculations Above
+            elif (product == 'COCONUTS') and (coconut_amount != 0):
+                if coconut_amount > 0:
+                    # BUY
+                    print("BUY", str(coconut_amount) + " COCONUTS", sorted_asks[-1])
+                    orders.append(Order(product, sorted_asks[-1], coconut_amount))
+                elif coconut_amount < 0:
+                    # SELL
+                    print("SELL", str(-coconut_amount) + " COCONUTS", sorted_bids[-1])
+                    orders.append(Order(product, sorted_bids[-1], coconut_amount))
+            # Pairs Trading - Executing Trades Based on Calculations Above
+            elif (product == 'PINA_COLADAS') and (pina_colada_amount != 0):
+                if pina_colada_amount > 0:
+                    # BUY
+                    print("BUY", str(pina_colada_amount) + " PINA_COLADAS", sorted_asks[-1])
+                    orders.append(Order(product, sorted_asks[-1], pina_colada_amount))
+                elif pina_colada_amount < 0:
+                    # SELL
+                    print("SELL", str(-pina_colada_amount) + " PINA_COLADAS", sorted_bids[-1])
+                    orders.append(Order(product, sorted_bids[-1], pina_colada_amount))
             # Simple Bollinger Band Mean Reversion for Coconuts
             elif product == 'COCONUTS':
                 K = 2
-                N = 300
+                N = 40000
                 N_2 = N * 2
 
                 moving_average = 0
@@ -288,7 +331,7 @@ class Trader:
             # Simple Bollinger Band Mean Reversion for Pina Coladas
             elif product == 'PINA_COLADAS':
                 K = 2
-                N = 300
+                N = 50000
                 N_2 = N * 2
 
                 moving_average = 0
@@ -330,8 +373,8 @@ class Trader:
                         orders.append(Order(product, best_bid, -best_bid_volume))
                         # Increment Counter
                         max_change_sell += best_bid_volume
+            # Default => Do nothing
             else:
-                # Default => Do nothing
                 continue
 
             # Add all the above orders to the result dict

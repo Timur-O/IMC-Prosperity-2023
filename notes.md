@@ -1,7 +1,6 @@
 ## Ideas:
+* Avellaneda & Stoikov Market-Making Strategy
 
-### COCONUTS AND PINA COLADAS
-* Pairs Trading
 ---
 ## Implemented:
 * PEARLS:
@@ -16,3 +15,4 @@
             * Current Gradient < Average => SELL
 * COCONUTS and PINA COLADAS:
     * Bollinger Bands Mean Reversion
+    * Pairs Trading
