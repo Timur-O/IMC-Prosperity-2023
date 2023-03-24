@@ -96,7 +96,7 @@ class Trader:
         coconut_amount: int = 0
 
         if ('COCONUTS' in state.order_depths.keys()) and ('PINA_COLADAS' in state.order_depths.keys()):
-            time_to_consider: int = 20000
+            time_to_consider: int = 2000
             z_score_entry_threshold: float = 2
             z_score_exit_threshold: float = 1
 
@@ -229,7 +229,7 @@ class Trader:
                             break
             # Simple Price Direction Indication via Orders for Bananas
             elif product == 'BANANAS':
-                history_length: int = 30000
+                history_length: int = 3000
 
                 if (len(order_depth.buy_orders) > 0) and \
                    (len(order_depth.sell_orders) > 0) and \
@@ -286,7 +286,7 @@ class Trader:
             # Simple Bollinger Band Mean Reversion for Coconuts
             elif product == 'COCONUTS':
                 K = 2
-                N = 40000
+                N = 4000
                 N_2 = N * 2
 
                 moving_average = 0
@@ -331,7 +331,7 @@ class Trader:
             # Simple Bollinger Band Mean Reversion for Pina Coladas
             elif product == 'PINA_COLADAS':
                 K = 2
-                N = 50000
+                N = 5000
                 N_2 = N * 2
 
                 moving_average = 0
