@@ -18,7 +18,7 @@ import random
 TIME_DELTA = 100
 # Please put all! the price and log files into
 # the same directory or adjust the code accordingly
-TRAINING_DATA_PREFIX = "./data/round-3-data"
+TRAINING_DATA_PREFIX = "./data"
 
 SYMBOLS = [
     'PEARLS',
@@ -317,19 +317,26 @@ def create_log_file(states: dict[int, TradingState], day, profits: dict[int, dic
         return profits
 
 
-def value_optimization_tester(trader_to_use: Trader, product: str, min_value: float, max_value: float, change_val: float):
+def value_optimization_tester(trader_to_use: Trader,
+                              product: str,
+                              min_value: float,
+                              max_value: float,
+                              change_val: float):
     profits_for_product = []
+    x_values = []
 
     curr_value = min_value
     while curr_value <= max_value:
+        x_values.append(curr_value)
+
         profits = simulate_alternative(rnd_inp, day_inp, trader_to_use, False, time_inp, True, curr_value)
         profits_for_product.append(profits[time_inp][product])
 
         # Increment
         curr_value += change_val
 
-    plt.title(product + ": " + str(min_value) + "-" + str(max_value))
-    plt.plot(profits_for_product)
+    plt.title(product, "-", str(day_inp) + ":", min_value, "-", max_value, " Delta:", change_val)
+    plt.plot(x_values, profits_for_product)
     plt.show()
 
     print(product, "Min:", min_value, ", Max:", max_value, "Results:", profits_for_product)
