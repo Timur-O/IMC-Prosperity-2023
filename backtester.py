@@ -335,7 +335,7 @@ def value_optimization_tester(trader_to_use: Trader,
         # Increment
         curr_value += change_val
 
-    plt.title(product, "-", str(day_inp) + ":", min_value, "-", max_value, " Delta:", change_val)
+    plt.title(product + " - " + str(day_inp) + ": " + str(min_value) + " - " + str(max_value) + " Delta: " + str(change_val))
     plt.plot(x_values, profits_for_product)
     plt.show()
 
