@@ -1,6 +1,8 @@
 ## Ideas:
 * Avellaneda & Stoikov Market-Making Strategy
-
+* ALL: (Requires Back-Testing)
+    * Find optimal history amount
+    * Find optimal thresholds
 ---
 ## Implemented:
 * PEARLS:
@@ -14,5 +16,9 @@
             * Current Gradient > Average => BUY
             * Current Gradient < Average => SELL
 * COCONUTS and PINA COLADAS:
-    * Bollinger Bands Mean Reversion
     * Pairs Trading
+* BERRIES:
+    * Time-Based Trading
+* DIVING GEAR:
+  * Track DOLPHIN SIGHTINGS, trade based on that:
+    * Bollinger Bands Mean Reversion to decide when to buy and sell

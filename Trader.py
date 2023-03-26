@@ -51,6 +51,10 @@ class Trader:
             "DIVING_GEAR": [0]
         }
 
+        self.historicalObservations: Dict[str, List[int]] = {
+            'DOLPHIN_SIGHTINGS': []
+        }
+
         self.historicalBestAsk: Dict[str, List[int]] = empty_list_dict
 
         self.historicalBestBid: Dict[str, List[int]] = empty_list_dict
@@ -272,25 +276,27 @@ class Trader:
             # If Z-Score Within Thresholds Or Not Enough History => Don't Buy or Sell
             return 0, 0
 
-    # Calculate the amount to buy/sell using mean reversion
+    # Calculate the amount to buy/sell using mean reversion on a tracked product
     def calculate_mean_reversion_amount(self,
-                                        product: str,
+                                        tracked_product: str,
+                                        traded_product: str,
                                         number_of_deviations: int,
-                                        amount_of_history: int,
-                                        state: TradingState):
-        half_history: int = round(amount_of_history / 2)
-
-        # Get all values for the product
-        order_depth: OrderDepth = state.order_depths[product]
+                                        amount_of_time_for_present: int,
+                                        amount_of_time_for_history: int,
+                                        state: TradingState) -> int:
+        # Get all values for the traded product
+        order_depth: OrderDepth = state.order_depths[traded_product]
         num_sell: int = len(order_depth.sell_orders)
         num_buy: int = len(order_depth.buy_orders)
-        historicalPrice: List[float] = self.historicalPrice[product]
-        position: int = get_position(product, state)
+        position: int = get_position(traded_product, state)
 
         # Get and calculate limits
-        limit: int = self.limits[product]
+        limit: int = self.limits[traded_product]
         max_buy: int = limit - position
         max_sell: int = -limit - position
+
+        # Get details for tracked product
+        historicalObservations: List[float] = self.historicalObservations[tracked_product]
 
         # Get general info
         sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
@@ -300,13 +306,12 @@ class Trader:
         amount: int = 0
 
         # Ensure there is enough historical data
-        if len(historicalPrice) >= amount_of_history:
-            moving_average: float = np.mean(historicalPrice[-amount_of_history:])
-            curr_prices: List[float] = historicalPrice[-half_history:]
-            overall_direction: float = np.gradient(historicalPrice[half_history:])[-1]
-            standard_deviation: float = np.std(np.subtract(curr_prices, moving_average))
+        if len(historicalObservations) >= amount_of_time_for_history:
+            moving_average: float = np.mean(historicalObservations[-amount_of_time_for_history:])
+            curr_observations: List[float] = historicalObservations[-amount_of_time_for_present:]
+            standard_deviation: float = np.std(np.subtract(curr_observations, moving_average))
 
-            if (num_sell > 0) and (overall_direction > 0) and (position < limit):
+            if (num_sell > 0) and (position < limit):
                 lower_band = moving_average - (number_of_deviations * standard_deviation)
                 order_counter: int = 0
                 while (max_buy > 0) and (order_counter < num_sell):
@@ -322,7 +327,7 @@ class Trader:
                     else:
                         break
 
-            if (num_buy > 0) and (overall_direction < 0) and (position < limit):
+            if (num_buy > 0) and (position < limit):
                 upper_band = moving_average + (number_of_deviations * standard_deviation)
 
                 order_counter: int = 0
@@ -338,6 +343,8 @@ class Trader:
                         max_sell += curr_volume
                     else:
                         break
+
+        return amount
 
     # Calculate the amount to buy/sell using time
     def calculate_time_based_amount(self, product: str, buy_time: Time, sell_time: Time, state: TradingState):
@@ -380,9 +387,9 @@ class Trader:
         # Calculate and keep track of product values
         for product in state.order_depths.keys():
             if product == 'DOLPHIN_SIGHTINGS':
-                continue
-
-            self.update_history(product, state)
+                self.historicalObservations[product].append(state.observations[product])
+            else:
+                self.update_history(product, state)
 
         # Simple Arbitrage for Pearls
         amounts['PEARLS'] = self.calculate_arbitrage_amount('PEARLS', 10000.00, state)
@@ -400,6 +407,14 @@ class Trader:
 
         # Time-Based Trading for Mayberries
         amounts['BERRIES'] = self.calculate_time_based_amount('BERRIES', 200000, 500000, state)
+
+        # Mean Reversion Based Tracking on Dolphin Sightings to Calculate Price of Diving Gear
+        amounts['DIVING_GEAR'] = self.calculate_mean_reversion_amount('DOLPHIN_SIGHTINGS',
+                                                                      'DIVING_GEAR',
+                                                                      2,
+                                                                      50,
+                                                                      150,
+                                                                      state)
 
         # Make purchases for each product based on previously calculated amounts
         for product in state.order_depths.keys():
