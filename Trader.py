@@ -1,9 +1,10 @@
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Tuple
+
 from datamodel import OrderDepth, TradingState, Order, Position
 
 
-def obv_sign(closing_diff: float):
+def obv_sign(closing_diff: float) -> int:
     if closing_diff > 0:
         return 1
     elif closing_diff == 0:
@@ -12,45 +13,331 @@ def obv_sign(closing_diff: float):
         return -1
 
 
+def get_position(product: str, state: TradingState) -> Position:
+    try:
+        return state.position[product]
+    except KeyError:
+        return Position(0)
+
+
 class Trader:
 
+    # Initialize limits and historical dictionaries containing arrays
     def __init__(self):
         self.limits: Dict[str, int] = {
             "PEARLS": 20,
             "BANANAS": 20,
             "COCONUTS": 600,
-            "PINA_COLADAS": 300
+            "PINA_COLADAS": 300,
+            "BERRIES": 250,
+            "DIVING_GEAR": 50
         }
 
-        self.historicalBestAsk: Dict[str, List[int]] = {
+        empty_list_dict: Dict[str, List[int]] = {
             "PEARLS": [],
             "BANANAS": [],
             "COCONUTS": [],
-            "PINA_COLADAS": []
-        }
-
-        self.historicalBestBid: Dict[str, List[int]] = {
-            "PEARLS": [],
-            "BANANAS": [],
-            "COCONUTS": [],
-            "PINA_COLADAS": []
-        }
-
-        self.historicalPrice: Dict[str, List[float]] = {
-            "PEARLS": [],
-            "BANANAS": [],
-            "COCONUTS": [],
-            "PINA_COLADAS": []
+            "PINA_COLADAS": [],
+            "BERRIES": [],
+            "DIVING_GEAR": []
         }
 
         self.historicalOBV: Dict[str, List[float]] = {
             "PEARLS": [0],
             "BANANAS": [0],
             "COCONUTS": [0],
-            "PINA_COLADAS": [0]
+            "PINA_COLADAS": [0],
+            "BERRIES": [0],
+            "DIVING_GEAR": [0]
         }
 
-        self.historicalPCtoCRatio: List[float] = []
+        self.historicalBestAsk: Dict[str, List[int]] = empty_list_dict
+
+        self.historicalBestBid: Dict[str, List[int]] = empty_list_dict
+
+        self.historicalPrice: Dict[str, List[float]] = empty_list_dict
+
+        self.historicalPairRatios: Dict[str, List[float]] = {}
+
+    # Update historical records
+    def update_history(self, product: str, state: TradingState) -> None:
+        # All Buy and Sell Orders for Product
+        order_depth: OrderDepth = state.order_depths[product]
+        num_sell: int = len(order_depth.sell_orders)
+        num_buy: int = len(order_depth.buy_orders)
+
+        # Keep Track of Historical Prices
+        if num_sell > 0:
+            sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
+            self.historicalBestAsk[product].append(sorted_asks[0])
+
+        if num_buy > 0:
+            sorted_bids: List[int] = sorted(set(order_depth.buy_orders.keys()), reverse=True)
+            self.historicalBestBid[product].append(sorted_bids[0])
+
+        if num_sell > 0 and num_buy > 0:
+            avg_price: float = np.mean([self.historicalBestBid[product][-1], self.historicalBestAsk[product][-1]])
+            self.historicalPrice[product].append(avg_price)
+
+        # Keep Track of OBV
+        current_volume: int = sum(order_depth.buy_orders.values()) + abs(sum(order_depth.sell_orders.values()))
+        if len(self.historicalPrice[product]) > 1:
+            price_diff: float = self.historicalPrice[product][-1] - self.historicalPrice[product][-2]
+            newOBV: float = self.historicalOBV[product][-1] + current_volume * obv_sign(price_diff)
+            self.historicalOBV[product].append(newOBV)
+        elif len(self.historicalPrice[product]) == 1:
+            price_diff: float = self.historicalPrice[product][-1]
+            newOBV: float = current_volume * obv_sign(price_diff)
+            self.historicalOBV[product].append(newOBV)
+
+    # Calculate amount to buy/sell using arbitrage
+    def calculate_arbitrage_amount(self, product: str, value: float, state: TradingState) -> int:
+        # Get all values for the product
+        order_depth: OrderDepth = state.order_depths[product]
+        num_sell: int = len(order_depth.sell_orders)
+        num_buy: int = len(order_depth.buy_orders)
+        position: int = get_position(product, state)
+
+        # Get and calculate limits
+        limit: int = self.limits[product]
+        max_buy: int = limit - position
+        max_sell: int = -limit - position
+
+        # Get general info
+        sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
+        sorted_bids: List[int] = sorted(set(order_depth.buy_orders.keys()), reverse=True)
+
+        # Initialize result
+        amount: int = 0
+
+        if (num_sell > 0) and (position < limit):
+            order_counter: int = 0
+            while (max_buy > 0) and (order_counter < num_sell):
+                # BUY
+                curr_ask: int = sorted_asks[order_counter]
+                curr_volume: int = max(order_depth.sell_orders[curr_ask], -max_buy)
+
+                # If the lowest ask is less than the fair value
+                if curr_ask < value:
+                    amount += -curr_volume
+
+                    # Increment Counter
+                    order_counter += 1
+                    max_buy += curr_volume
+                else:
+                    break
+
+        # If any BUY orders and position limits allow selling
+        if (num_buy > 0) and (position > -limit):
+            order_counter: int = 0
+            while (max_sell < 0) and (order_counter < num_buy):
+                curr_bid: int = sorted_bids[order_counter]
+                curr_volume: int = min(order_depth.buy_orders[curr_bid], -max_sell)
+
+                # If the highest bid is more than the fair value
+                if curr_bid > value:
+                    amount += -curr_volume
+
+                    # Increment Counter
+                    order_counter += 1
+                    max_sell += curr_volume
+                else:
+                    break
+
+        # Return the calculated amount
+        return amount
+
+    # Calculate the amount to buy/sell using simple price direction indication from the order book
+    def calculate_price_direction_amount(self, product: str,
+                                         imbalance_threshold: float,
+                                         amount_of_history: int,
+                                         state: TradingState) -> int:
+        # Get all values for the product
+        order_depth: OrderDepth = state.order_depths[product]
+        num_sell: int = len(order_depth.sell_orders)
+        num_buy: int = len(order_depth.buy_orders)
+        historicalOBV: List[float] = self.historicalOBV[product]
+        position: int = get_position(product, state)
+
+        # Get and calculate limits
+        limit: int = self.limits[product]
+        max_buy: int = limit - position
+        max_sell: int = -limit - position
+
+        # Get general info
+        sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
+        sorted_bids: List[int] = sorted(set(order_depth.buy_orders.keys()), reverse=True)
+
+        # Initialize result
+        amount: int = 0
+
+        # Ensure there is enough historical data and are enough buy/sell orders
+        if (len(historicalOBV) >= amount_of_history) and (num_buy > 0) and (num_sell > 0):
+            # Imbalance Ratio
+            imbalance_ratio: float = sum(order_depth.buy_orders.values()) / abs(sum(order_depth.sell_orders.values()))
+
+            # Gradient of OBV
+            obv_gradient: float = np.gradient(historicalOBV)[-1]
+            obv_average: float = np.mean(historicalOBV[-amount_of_history:])
+
+            # Imbalance > 1 => Price Up, Current OBV Gradient > OBV Average => BUY
+            if (imbalance_ratio > imbalance_threshold) and (obv_gradient > obv_average) and (max_buy > 0):
+                order_counter: int = 0
+                while (max_buy > 0) and (order_counter < num_sell):
+                    curr_ask: int = sorted_asks[order_counter]
+                    curr_volume: int = max(order_depth.sell_orders[curr_ask], -max_buy)
+
+                    amount += -curr_volume
+
+                    # Increment Counter
+                    order_counter += 1
+                    max_buy += curr_volume
+
+            # Imbalance < 1 => Price Down, Current OBV Gradient < OBV Average => SELL
+            if (imbalance_ratio < imbalance_threshold) and (obv_gradient < obv_average) and (max_sell < 0):
+                order_counter: int = 0
+                while (max_sell < 0) and (order_counter < num_buy):
+                    curr_bid: int = sorted_bids[order_counter]
+                    curr_volume: int = min(order_depth.buy_orders[curr_bid], -max_sell)
+
+                    amount += -curr_volume
+
+                    # Increment Counter
+                    order_counter += 1
+                    max_sell += curr_volume
+
+        # Return the calculated amount
+        return amount
+
+    # Calculate the amounts to buy/sell using pair trading
+    def calculate_pair_trading_amounts(self,
+                                       product1: str,
+                                       product2: str,
+                                       entry_threshold: float,
+                                       exit_threshold: float,
+                                       amount_of_history: int,
+                                       state: TradingState) -> Tuple[int, int]:
+        # Initialize historical ratio list if it doesn't exist yet
+        both_products = product1 + product2
+        if both_products not in self.historicalPairRatios.keys():
+            self.historicalPairRatios[both_products] = []
+
+        if (product1 in state.order_depths.keys()) and (product2 in state.order_depths.keys()):
+            # Get Current Positions
+            product1_position: Position = get_position(product1, state)
+            product2_position: Position = get_position(product2, state)
+
+            # Get Current Prices
+            product1_price: float = self.historicalPrice[product1][-1]
+            product2_price: float = self.historicalPrice[product2][-1]
+
+            # Get and Calculate Limits
+            product1_limit: int = self.limits[product1]
+            product2_limit: int = self.limits[product2]
+            product1_max_buy: int = product1_limit - product1_position
+            product2_max_buy: int = product2_limit - product2_position
+            product1_max_sell: int = -product1_limit - product1_position
+            product2_max_sell: int = -product2_limit - product2_position
+
+            # Calculate and Keep Track of the Ratio
+            current_ratio: float = product2_price / product1_price
+            self.historicalPairRatios[both_products].append(current_ratio)
+
+            # Ensure that there is enough historical data
+            if len(self.historicalPairRatios[both_products]) >= amount_of_history:
+                historical_ratios: list = self.historicalPairRatios[both_products][-amount_of_history:]
+
+                # Calculate historical values
+                ratio_average: float = np.mean(historical_ratios)
+                ratio_std: float = np.std(historical_ratios)
+
+                # Calculate z-score
+                z_score: float = (current_ratio - ratio_average) / ratio_std
+
+                # Exit Any Existing Position if Ratio has Normalized
+                if -exit_threshold <= z_score <= exit_threshold:
+                    return -product1_position, -product2_position
+                # Enter a New Position if Ratio Passes Entry Threshold (Upper)
+                elif z_score > entry_threshold:
+                    # Product 2 Overpriced (i.e. sell) or Product 1 Underpriced (i.e. buy)
+                    product2_amount = max(product2_max_sell, -round(product1_max_buy * current_ratio))  # Sell
+                    product1_amount = min(product1_max_buy, round(product2_max_sell / current_ratio))   # Buy
+                    return product1_amount, product2_amount
+                # Enter a New Position if Ratio Passes Entry Threshold (Lower)
+                elif z_score < -entry_threshold:
+                    # Product 2 Underpriced (i.e. buy) or Product 1 Overpriced (i.e. sell)
+                    product2_amount = min(product2_max_buy, round(product1_max_sell / current_ratio))   # Buy
+                    product1_amount = max(product1_max_sell, -round(product2_max_buy * current_ratio))  # Sell
+                    return product1_amount, product2_amount
+            # If Z-Score Within Thresholds Or Not Enough History => Don't Buy or Sell
+            return 0, 0
+
+    # Calculate the amount to buy/sell using mean reversion
+    def calculate_mean_reversion_amount(self,
+                                        product: str,
+                                        number_of_deviations: int,
+                                        amount_of_history: int,
+                                        state: TradingState):
+        half_history: int = round(amount_of_history / 2)
+
+        # Get all values for the product
+        order_depth: OrderDepth = state.order_depths[product]
+        num_sell: int = len(order_depth.sell_orders)
+        num_buy: int = len(order_depth.buy_orders)
+        historicalPrice: List[float] = self.historicalPrice[product]
+        position: int = get_position(product, state)
+
+        # Get and calculate limits
+        limit: int = self.limits[product]
+        max_buy: int = limit - position
+        max_sell: int = -limit - position
+
+        # Get general info
+        sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
+        sorted_bids: List[int] = sorted(set(order_depth.buy_orders.keys()), reverse=True)
+
+        # Initialize result
+        amount: int = 0
+
+        # Ensure there is enough historical data
+        if len(historicalPrice) >= amount_of_history:
+            moving_average: float = np.mean(historicalPrice[-amount_of_history:])
+            curr_prices: List[float] = historicalPrice[-half_history:]
+            overall_direction: float = np.gradient(historicalPrice[half_history:])[-1]
+            standard_deviation: float = np.std(np.subtract(curr_prices, moving_average))
+
+            if (num_sell > 0) and (overall_direction > 0) and (position < limit):
+                lower_band = moving_average - (number_of_deviations * standard_deviation)
+                order_counter: int = 0
+                while (max_buy > 0) and (order_counter < num_sell):
+                    curr_ask: int = sorted_asks[order_counter]
+                    curr_volume: int = max(order_depth.sell_orders[curr_ask], -max_buy)
+
+                    if curr_ask < lower_band:
+                        amount += -curr_volume
+
+                        # Increment Counter
+                        order_counter += 1
+                        max_buy += curr_volume
+                    else:
+                        break
+
+            if (num_buy > 0) and (overall_direction < 0) and (position < limit):
+                upper_band = moving_average + (number_of_deviations * standard_deviation)
+
+                order_counter: int = 0
+                while (max_sell < 0) and (order_counter < num_buy):
+                    curr_bid: int = sorted_bids[order_counter]
+                    curr_volume: int = min(order_depth.buy_orders[curr_bid], -max_sell)
+
+                    if curr_bid > upper_band:
+                        amount += -curr_volume
+
+                        # Increment Counter
+                        order_counter += 1
+                        max_sell += curr_volume
+                    else:
+                        break
 
     def run(self, state: TradingState) -> Dict[str, List[Order]]:
         """
@@ -58,322 +345,82 @@ class Trader:
         and outputs a list of orders to be sent
         """
         # Initialize the method output dict as an empty dict
-        result = {}
+        result: Dict[str, List[Order]] = {}
+
+        # Initialize amounts dictionary
+        amounts: Dict[str, int] = {
+            "PEARLS": 0,
+            "BANANAS": 0,
+            "COCONUTS": 0,
+            "PINA_COLADAS": 0,
+            "BERRIES": 0,
+            "DIVING_GEAR": 0
+        }
 
         # Calculate and keep track of product values
         for product in state.order_depths.keys():
-            # All Buy and Sell Orders for Product
-            order_depth: OrderDepth = state.order_depths[product]
-            num_sell = len(order_depth.sell_orders)
-            num_buy = len(order_depth.buy_orders)
+            if product == 'DOLPHIN_SIGHTINGS':
+                continue
 
-            # Keep Track of Historical Prices
-            if num_sell > 0:
-                sorted_asks = sorted(set(order_depth.sell_orders.keys()))
-                self.historicalBestAsk[product].append(sorted_asks[0])
+            self.update_history(product, state)
 
-            if num_buy > 0:
-                sorted_bids = sorted(set(order_depth.buy_orders.keys()), reverse=True)
-                self.historicalBestBid[product].append(sorted_bids[0])
+        # Simple Arbitrage for Pearls
+        amounts['PEARLS'] = self.calculate_arbitrage_amount('PEARLS', 10000.00, state)
 
-            if num_sell > 0 and num_buy > 0:
-                avg_price = np.mean([self.historicalBestBid[product][-1], self.historicalBestAsk[product][-1]])
-                self.historicalPrice[product].append(avg_price)
-
-            # Keep Track of OBV
-            current_volume = sum(order_depth.buy_orders.values()) + abs(sum(order_depth.sell_orders.values()))
-            if len(self.historicalPrice[product]) > 1:
-                price_diff = self.historicalPrice[product][-1] - self.historicalPrice[product][-2]
-                newOBV = self.historicalOBV[product][-1] + current_volume * obv_sign(price_diff)
-            else:
-                price_diff = self.historicalPrice[product][-1]
-                newOBV = current_volume * obv_sign(price_diff)
-
-            self.historicalOBV[product].append(newOBV)
+        # Simple Price Direction Indication via Order Book for Bananas
+        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 1, 3000, state)
 
         # Pair Trading w/ Z-Score for Coconuts and Pina Coladas
-        pina_colada_amount: int = 0
-        coconut_amount: int = 0
+        amounts['COCONUTS'], amounts['PINA_COLADAS'] = self.calculate_pair_trading_amounts('COCONUTS',
+                                                                                           'PINA_COLADAS',
+                                                                                           2,
+                                                                                           1,
+                                                                                           2000,
+                                                                                           state)
 
-        if ('COCONUTS' in state.order_depths.keys()) and ('PINA_COLADAS' in state.order_depths.keys()):
-            time_to_consider: int = 2000
-            z_score_entry_threshold: float = 2
-            z_score_exit_threshold: float = 1
-
-            # Get Current Positions
-            try:
-                coconut_position: Position = state.position['COCONUTS']
-            except KeyError:
-                coconut_position: Position = Position(0)
-
-            try:
-                pina_colada_position: Position = state.position['PINA_COLADAS']
-            except KeyError:
-                pina_colada_position: Position = Position(0)
-
-            coconut_price: float = self.historicalPrice['COCONUTS'][-1]
-            pina_colada_price: float = self.historicalPrice['PINA_COLADAS'][-1]
-
-            coconut_limit: int = self.limits['COCONUTS']
-            coconut_max_change_buy: int = coconut_limit - coconut_position
-            coconut_max_change_sell: int = -coconut_limit - coconut_position  # -- => +
-            pina_colada_limit: int = self.limits['PINA_COLADAS']
-            pina_colada_max_change_buy: int = pina_colada_limit - pina_colada_position
-            pina_colada_max_change_sell: int = -pina_colada_limit - pina_colada_position  # -- => +
-
-            # Calculate and Keep Track of the Ratio
-            current_ratio = pina_colada_price / coconut_price
-            self.historicalPCtoCRatio.append(current_ratio)
-
-            print("Z", current_ratio)
-
-            if len(self.historicalPCtoCRatio) >= time_to_consider:
-                historical_ratio_average = np.mean(self.historicalPCtoCRatio[-time_to_consider:])
-                historical_ratio_std = np.std(self.historicalPCtoCRatio[-time_to_consider:])
-                z_score_pc_c = (current_ratio - historical_ratio_average) / historical_ratio_std
-
-                historical_pc_price = self.historicalPrice['PINA_COLADAS'][-time_to_consider:]
-                historical_c_price = self.historicalPrice['COCONUTS'][-time_to_consider:]
-                historical_mean_pc_price = np.mean(historical_pc_price)
-                historical_mean_c_price = np.mean(historical_c_price)
-
-                # Exit Position if Ratio is Normalized
-                if -z_score_exit_threshold <= z_score_pc_c <= z_score_exit_threshold:
-                    coconut_amount = -coconut_position
-                    pina_colada_amount = -pina_colada_position
-                # Enter Position if Ratio is Above Threshold
-                elif z_score_pc_c > z_score_entry_threshold:
-                    if pina_colada_price > historical_mean_pc_price:
-                        # Pina Coladas Overpriced => Sell, Short
-                        pina_colada_amount = max(pina_colada_max_change_sell, -round(coconut_max_change_buy * current_ratio))
-                    elif coconut_price < historical_mean_c_price:
-                        # Coconuts are Underpriced => Buy, Long
-                        coconut_amount = min(coconut_max_change_buy, round(pina_colada_max_change_sell / current_ratio))
-                # Enter Position if Ratio is Below Threshold
-                elif z_score_pc_c < -z_score_entry_threshold:
-                    # Pina Coladas are underpriced => Buy or Coconuts are overpriced => Sell
-                    if pina_colada_price < historical_mean_pc_price:
-                        # Pina Coladas Underpriced => Buy
-                        pina_colada_amount = min(pina_colada_max_change_buy, round(coconut_max_change_sell * current_ratio))
-                    elif coconut_price > historical_mean_c_price:
-                        # Coconuts are Overpriced => Sell
-                        coconut_amount = max(coconut_max_change_sell, -round(pina_colada_max_change_buy / current_ratio))
-
-        # Iterate over all the available products contained in the order depths
+        # Make purchases for each product based on previously calculated amounts
         for product in state.order_depths.keys():
-            # All Buy and Sell Orders for Product
+            if product == 'DOLPHIN_SIGHTINGS':
+                continue
+
+            # Get general info about current market
             order_depth: OrderDepth = state.order_depths[product]
-            num_sell = len(order_depth.sell_orders)
-            num_buy = len(order_depth.buy_orders)
+            num_sell: int = len(order_depth.sell_orders)
+            num_buy: int = len(order_depth.buy_orders)
+            sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
+            sorted_bids: List[int] = sorted(set(order_depth.buy_orders.keys()), reverse=True)
 
-            # Get Current Position
-            try:
-                position: Position = state.position[product]
-            except KeyError:
-                position: Position = Position(0)
-
-            # Calculate Current Limits for Product
-            limit: int = self.limits[product]
-            max_change_buy = limit - position
-            max_change_sell = -limit - position  # -- => +
-
-            sorted_asks = sorted(set(order_depth.sell_orders.keys()))
-            sorted_bids = sorted(set(order_depth.buy_orders.keys()), reverse=True)
-
-            # historicalBestAsk = self.historicalBestAsk[product]
-            # historicalBestBid = self.historicalBestAsk[product]
-            historicalPrice = self.historicalPrice[product]
-            historicalOBV = self.historicalOBV[product]
+            # Get product specific values
+            amount: int = amounts[product]
 
             # Initialize the list of Orders to be sent
             orders: List[Order] = []
 
-            # Simple Arbitrage for Pearls
-            if product == 'PEARLS':
-                # Pearls are worth ~10,000 in general
-                acceptable_price_pearls = 10000.00
-
-                # If any SELL orders and position limits allow buying
-                if (num_sell > 0) and (position < limit):
-                    order_counter = 0
-                    while max_change_buy > 0:
-                        best_ask = sorted_asks[order_counter]
-                        best_ask_volume = max(order_depth.sell_orders[best_ask], -max_change_buy)
-
-                        # If the lowest ask is less than the fair value
-                        if best_ask < acceptable_price_pearls:
-                            # Create a buy order to buy these cheap pearls
-                            print("BUY", str(-best_ask_volume) + " PEARLS", best_ask)
-                            orders.append(Order(product, best_ask, -best_ask_volume))
-                            # Increment Counter
-                            order_counter += 1
-                            max_change_buy += best_ask_volume
-                        else:
-                            break
-
-                # If any BUY orders and position limits allow selling
-                if (num_buy > 0) and (position > -limit):
-                    order_counter = 0
-                    while max_change_sell < 0:
-                        best_bid = sorted_bids[order_counter]
-                        best_bid_volume = min(order_depth.buy_orders[best_bid], -max_change_sell)
-
-                        # If the highest bid is more than the fair value
-                        if best_bid > acceptable_price_pearls:
-                            print("SELL", str(best_bid_volume) + " PEARLS", best_bid)
-                            orders.append(Order(product, best_bid, -best_bid_volume))
-                            # Increment Counter
-                            order_counter += 1
-                            max_change_sell += best_bid_volume
-                        else:
-                            break
-            # Simple Price Direction Indication via Orders for Bananas
-            elif product == 'BANANAS':
-                history_length: int = 3000
-
-                if (len(order_depth.buy_orders) > 0) and \
-                   (len(order_depth.sell_orders) > 0) and \
-                   (len(historicalOBV) >= history_length):
-                    # Imbalance Ratio
-                    imbalance_ratio = sum(order_depth.buy_orders.values()) / abs(sum(order_depth.sell_orders.values()))
-                    imbalance_threshold = 1
-
-                    # Gradient of OBV
-                    obv_gradient = np.gradient(historicalOBV)[-1]
-                    obv_average = np.mean(historicalOBV[-history_length])
-
-                    if (imbalance_ratio > imbalance_threshold) and \
-                       (obv_gradient > obv_average) and \
-                       (max_change_buy > 0):
-                        # Imbalance > 1 => Price Up, Current OBV Gradient > OBV Average => BUY
-                        best_ask = min(order_depth.sell_orders.keys())
-                        best_ask_volume = max(order_depth.sell_orders[best_ask], -max_change_buy)
-                        print("BUY", str(-best_ask_volume) + " BANANAS", best_ask)
-                        orders.append(Order(product, best_ask, -best_ask_volume))
-                        # Increment Counter
-                        max_change_buy += best_ask_volume
-
-                    if (imbalance_ratio < imbalance_threshold) and \
-                       (obv_gradient < obv_average) and \
-                       (max_change_sell < 0):
-                        # Imbalance < 1 => Price Down, Current OBV Gradient < OBV Average => SELL
-                        best_bid = max(order_depth.buy_orders.keys())
-                        best_bid_volume = min(order_depth.buy_orders[best_bid], -max_change_sell)
-                        print("SELL", str(best_bid_volume) + " BANANAS", best_bid)
-                        orders.append(Order(product, best_bid, -best_bid_volume))
-                        # Increment Counter
-                        max_change_sell += best_bid_volume
-            # Pairs Trading - Executing Trades Based on Calculations Above
-            elif (product == 'COCONUTS') and (coconut_amount != 0):
-                if coconut_amount > 0:
+            if amount != 0:
+                order_counter: int = 0
+                while (amount > 0) and order_counter < num_sell:
                     # BUY
-                    print("BUY", str(coconut_amount) + " COCONUTS", sorted_asks[-1])
-                    orders.append(Order(product, sorted_asks[-1], coconut_amount))
-                elif coconut_amount < 0:
+                    curr_ask: int = sorted_asks[-order_counter]
+                    curr_volume: int = max(-amount, order_depth.sell_orders[curr_ask])
+
+                    print("BUY", str(-curr_volume) + " " + product, curr_ask)
+                    orders.append(Order(product, curr_ask, -curr_volume))
+
+                    amount -= -curr_volume
+                    order_counter += 1
+
+                order_counter: int = 0
+                while (amount < 0) and (order_counter < num_buy):
                     # SELL
-                    print("SELL", str(-coconut_amount) + " COCONUTS", sorted_bids[-1])
-                    orders.append(Order(product, sorted_bids[-1], coconut_amount))
-            # Pairs Trading - Executing Trades Based on Calculations Above
-            elif (product == 'PINA_COLADAS') and (pina_colada_amount != 0):
-                if pina_colada_amount > 0:
-                    # BUY
-                    print("BUY", str(pina_colada_amount) + " PINA_COLADAS", sorted_asks[-1])
-                    orders.append(Order(product, sorted_asks[-1], pina_colada_amount))
-                elif pina_colada_amount < 0:
-                    # SELL
-                    print("SELL", str(-pina_colada_amount) + " PINA_COLADAS", sorted_bids[-1])
-                    orders.append(Order(product, sorted_bids[-1], pina_colada_amount))
-            # Simple Bollinger Band Mean Reversion for Coconuts
-            elif product == 'COCONUTS':
-                K = 2
-                N = 4000
-                N_2 = N * 2
+                    curr_bid: int = sorted_bids[-order_counter]
+                    curr_volume: int = min(-amount, order_depth.buy_orders[curr_bid])
 
-                moving_average = 0
-                overall_direction = 0
-                standard_deviation = 0
+                    print("SELL", str(curr_volume) + " " + product, curr_bid)
+                    orders.append(Order(product, curr_bid, -curr_volume))
 
-                if len(historicalPrice) >= N_2:
-                    moving_average = np.mean(historicalPrice[-N_2:])
-                    curr_prices = historicalPrice[-N:]
-                    overall_direction = np.gradient(historicalPrice[-N:])[-1]
-                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
-                    standard_deviation = np.std(curr_prices_minus_mean)
+                    amount += curr_volume
 
-                # If any SELL orders and position limits allow buying
-                if (num_sell > 0) and (position < limit) and (overall_direction > 0):
-                    lower_band = moving_average - (K * standard_deviation)
-
-                    best_ask = sorted_asks[0]
-                    best_ask_volume = max(order_depth.sell_orders[best_ask], -max_change_buy)
-
-                    # If the lowest ask is less than the fair value
-                    if best_ask < lower_band:
-                        # Create a buy order to buy these cheap pearls
-                        print("BUY", str(-best_ask_volume) + " COCONUTS", best_ask)
-                        orders.append(Order(product, best_ask, -best_ask_volume))
-                        # Increment Counter
-                        max_change_buy += best_ask_volume
-
-                # If any BUY orders and position limits allow selling
-                if (num_buy > 0) and (position > -limit) and (overall_direction < 0):
-                    upper_band = moving_average + (K * standard_deviation)
-
-                    best_bid = sorted_bids[0]
-                    best_bid_volume = min(order_depth.buy_orders[best_bid], -max_change_sell)
-
-                    # If the highest bid is more than the fair value
-                    if best_bid > upper_band:
-                        print("SELL", str(best_bid_volume) + " COCONUTS", best_bid)
-                        orders.append(Order(product, best_bid, -best_bid_volume))
-                        # Increment Counter
-                        max_change_sell += best_bid_volume
-            # Simple Bollinger Band Mean Reversion for Pina Coladas
-            elif product == 'PINA_COLADAS':
-                K = 2
-                N = 5000
-                N_2 = N * 2
-
-                moving_average = 0
-                overall_direction = 0
-                standard_deviation = 0
-
-                if len(historicalPrice) >= N_2:
-                    moving_average = np.mean(historicalPrice[-N_2:])
-                    curr_prices = historicalPrice[-N:]
-                    overall_direction = np.gradient(historicalPrice[-N:])[-1]
-                    curr_prices_minus_mean = np.subtract(curr_prices, moving_average)
-                    standard_deviation = np.std(curr_prices_minus_mean)
-
-                # If any SELL orders and position limits allow buying
-                if (num_sell > 0) and (position < limit) and (overall_direction > 0):
-                    lower_band = moving_average - (K * standard_deviation)
-
-                    best_ask = sorted_asks[0]
-                    best_ask_volume = max(order_depth.sell_orders[best_ask], -max_change_buy)
-
-                    # If the lowest ask is less than the fair value
-                    if best_ask < lower_band:
-                        # Create a buy order to buy these cheap pearls
-                        print("BUY", str(-best_ask_volume) + " PINA COLADAS", best_ask)
-                        orders.append(Order(product, best_ask, -best_ask_volume))
-                        # Increment Counter
-                        max_change_buy += best_ask_volume
-
-                # If any BUY orders and position limits allow selling
-                if (num_buy > 0) and (position > -limit) and (overall_direction < 0):
-                    upper_band = moving_average + (K * standard_deviation)
-
-                    best_bid = sorted_bids[0]
-                    best_bid_volume = min(order_depth.buy_orders[best_bid], -max_change_sell)
-
-                    # If the highest bid is more than the fair value
-                    if best_bid > upper_band:
-                        print("SELL", str(best_bid_volume) + " PINA COLADAS", best_bid)
-                        orders.append(Order(product, best_bid, -best_bid_volume))
-                        # Increment Counter
-                        max_change_sell += best_bid_volume
-            # Default => Do nothing
+                    order_counter += 1
             else:
                 continue
 
