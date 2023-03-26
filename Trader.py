@@ -441,9 +441,9 @@ class Trader:
         # Pair Trading w/ Z-Score for Coconuts and Pina Coladas
         amounts['COCONUTS'], amounts['PINA_COLADAS'] = self.calculate_pair_trading_amounts('COCONUTS',
                                                                                            'PINA_COLADAS',
-                                                                                           2,
                                                                                            1,
-                                                                                           2000,
+                                                                                           2,
+                                                                                           600,
                                                                                            state)
 
         # Time-Based Trading for Mayberries
