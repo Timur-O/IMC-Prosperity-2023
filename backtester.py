@@ -330,7 +330,10 @@ def value_optimization_tester(trader_to_use: Trader,
         x_values.append(curr_value)
 
         profits = simulate_alternative(rnd_inp, day_inp, trader_to_use, False, time_inp, True, curr_value)
-        profits_for_product.append(profits[time_inp][product])
+        if product == 'CPC':
+            profits_for_product.append(profits[time_inp]['COCONUTS'] + profits[time_inp]['PINA_COLADAS'])
+        else:
+            profits_for_product.append(profits[time_inp][product])
 
         # Increment
         curr_value += change_val

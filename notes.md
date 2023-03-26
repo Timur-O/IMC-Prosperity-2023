@@ -1,5 +1,13 @@
 ## Ideas:
 * Avellaneda & Stoikov Market-Making Strategy
+
+#### PICNIC Stuff:
+   * 1x PICNIC_BASKET =
+      * 2x BAGUETTE
+      * 4x DIP
+      * 1x UKULELE
+   * Buying Combined Cheaper => Sell Each Separately
+   * Buying Separate Cheaper => Sell Combined
 ---
 ## Implemented:
 #### PEARLS:
