@@ -27,7 +27,6 @@ SYMBOLS = [
     'PINA_COLADAS',
     'DIVING_GEAR',
     'BERRIES',
-    'DOLPHIN_SIGHTINGS',
     "BAGUETTE",
     "DIP",
     "UKULELE",
@@ -51,30 +50,30 @@ def process_prices(df_prices, time_limit) -> dict[int, TradingState]:
             depths = {}
             states[time] = TradingState(time, listings, depths, own_trades, market_trades, position, observations)
 
-        if product not in states[time].position:
-            states[time].position[product] = 0
-            states[time].own_trades[product] = []
-            states[time].market_trades[product] = []
-
         states[time].listings[product] = Listing(product, product, "1")
 
         if product == "DOLPHIN_SIGHTINGS":
             states[time].observations["DOLPHIN_SIGHTINGS"] = row['mid_price']
+        else:
+            if product not in states[time].position:
+                states[time].position[product] = 0
+                states[time].own_trades[product] = []
+                states[time].market_trades[product] = []
 
-        depth = OrderDepth()
-        if row["bid_price_1"] > 0:
-            depth.buy_orders[row["bid_price_1"]] = int(row["bid_volume_1"])
-        if row["bid_price_2"] > 0:
-            depth.buy_orders[row["bid_price_2"]] = int(row["bid_volume_2"])
-        if row["bid_price_3"] > 0:
-            depth.buy_orders[row["bid_price_3"]] = int(row["bid_volume_3"])
-        if row["ask_price_1"] > 0:
-            depth.sell_orders[row["ask_price_1"]] = -int(row["ask_volume_1"])
-        if row["ask_price_2"] > 0:
-            depth.sell_orders[row["ask_price_2"]] = -int(row["ask_volume_2"])
-        if row["ask_price_3"] > 0:
-            depth.sell_orders[row["ask_price_3"]] = -int(row["ask_volume_3"])
-        states[time].order_depths[product] = depth
+            depth = OrderDepth()
+            if row["bid_price_1"] > 0:
+                depth.buy_orders[row["bid_price_1"]] = int(row["bid_volume_1"])
+            if row["bid_price_2"] > 0:
+                depth.buy_orders[row["bid_price_2"]] = int(row["bid_volume_2"])
+            if row["bid_price_3"] > 0:
+                depth.buy_orders[row["bid_price_3"]] = int(row["bid_volume_3"])
+            if row["ask_price_1"] > 0:
+                depth.sell_orders[row["ask_price_1"]] = -int(row["ask_volume_1"])
+            if row["ask_price_2"] > 0:
+                depth.sell_orders[row["ask_price_2"]] = -int(row["ask_volume_2"])
+            if row["ask_price_3"] > 0:
+                depth.sell_orders[row["ask_price_3"]] = -int(row["ask_volume_3"])
+            states[time].order_depths[product] = depth
 
     return states
 

@@ -8,6 +8,7 @@
       * 1x UKULELE
    * Buying Combined Cheaper => Sell Each Separately
    * Buying Separate Cheaper => Sell Combined
+   * Statistical Arbitrage
 ---
 ## Implemented:
 #### PEARLS:

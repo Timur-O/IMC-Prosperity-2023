@@ -453,12 +453,12 @@ class Trader:
             "PICNIC_BASKET": 0
         }
 
+        # Update Dolphin Sightings
+        self.historicalObservations['DOLPHIN_SIGHTINGS'].append(state.observations['DOLPHIN_SIGHTINGS'])
+
         # Calculate and keep track of product values
         for product in state.order_depths.keys():
-            if product == 'DOLPHIN_SIGHTINGS':
-                self.historicalObservations[product].append(state.observations[product])
-            else:
-                self.update_history(product, state)
+            self.update_history(product, state)
 
         # Simple Arbitrage for Pearls
         amounts['PEARLS'] = self.calculate_arbitrage_amount('PEARLS', 10000.00, state)
