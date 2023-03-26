@@ -1,9 +1,5 @@
 ## Ideas:
 * Avellaneda & Stoikov Market-Making Strategy
-
-#### Pair Trading:
-  * Make sure the actual amount available matches returned values for _amount variables
-  * Make sure the amount doesn't mess with the ratio
 ---
 ## Implemented:
 #### PEARLS:

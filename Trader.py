@@ -33,15 +33,6 @@ class Trader:
             "DIVING_GEAR": 50
         }
 
-        empty_list_dict: Dict[str, List[int]] = {
-            "PEARLS": [],
-            "BANANAS": [],
-            "COCONUTS": [],
-            "PINA_COLADAS": [],
-            "BERRIES": [],
-            "DIVING_GEAR": []
-        }
-
         self.historicalOBV: Dict[str, List[float]] = {
             "PEARLS": [0],
             "BANANAS": [0],
@@ -64,11 +55,32 @@ class Trader:
             'DOLPHIN_SIGHTINGS': []
         }
 
-        self.historicalBestAsk: Dict[str, List[int]] = empty_list_dict
+        self.historicalBestAsk: Dict[str, List[int]] = {
+            "PEARLS": [],
+            "BANANAS": [],
+            "COCONUTS": [],
+            "PINA_COLADAS": [],
+            "BERRIES": [],
+            "DIVING_GEAR": []
+        }
 
-        self.historicalBestBid: Dict[str, List[int]] = empty_list_dict
+        self.historicalBestBid: Dict[str, List[int]] = {
+            "PEARLS": [],
+            "BANANAS": [],
+            "COCONUTS": [],
+            "PINA_COLADAS": [],
+            "BERRIES": [],
+            "DIVING_GEAR": []
+        }
 
-        self.historicalPrice: Dict[str, List[float]] = empty_list_dict
+        self.historicalPrice: Dict[str, List[float]] = {
+            "PEARLS": [],
+            "BANANAS": [],
+            "COCONUTS": [],
+            "PINA_COLADAS": [],
+            "BERRIES": [],
+            "DIVING_GEAR": []
+        }
 
         self.historicalPairRatios: Dict[str, List[float]] = {}
 
@@ -245,6 +257,19 @@ class Trader:
             # Get Current Prices
             product1_price: float = self.historicalPrice[product1][-1]
             product2_price: float = self.historicalPrice[product2][-1]
+            product1_ask_price: int = self.historicalBestAsk[product1][-1]
+            product1_bid_price: int = self.historicalBestBid[product1][-1]
+            product2_ask_price: int = self.historicalBestAsk[product2][-1]
+            product2_bid_price: int = self.historicalBestBid[product2][-1]
+
+            # Get Current Volumes
+            product1_order_depth: OrderDepth = state.order_depths[product1]
+            product2_order_depth: OrderDepth = state.order_depths[product2]
+
+            product1_bid_volume: int = product1_order_depth.buy_orders[product1_bid_price]
+            product2_bid_volume: int = product2_order_depth.buy_orders[product2_bid_price]
+            product1_ask_volume: int = product1_order_depth.sell_orders[product1_ask_price]
+            product2_ask_volume: int = product2_order_depth.sell_orders[product2_ask_price]
 
             # Get and Calculate Limits
             product1_limit: int = self.limits[product1]
@@ -253,6 +278,11 @@ class Trader:
             product2_max_buy: int = product2_limit - product2_position
             product1_max_sell: int = -product1_limit - product1_position
             product2_max_sell: int = -product2_limit - product2_position
+
+            product1_sell_limit: int = max(product1_max_sell, -product1_bid_volume)
+            product2_sell_limit: int = max(product2_max_sell, -product2_bid_volume)
+            product1_buy_limit: int = min(product1_max_buy, -product1_ask_volume)
+            product2_buy_limit: int = min(product2_max_buy, -product2_ask_volume)
 
             # Calculate and Keep Track of the Ratio
             current_ratio: float = product2_price / product1_price
@@ -275,14 +305,14 @@ class Trader:
                 # Enter a New Position if Ratio Passes Entry Threshold (Upper)
                 elif z_score > entry_threshold:
                     # Product 2 Overpriced (i.e. sell) or Product 1 Underpriced (i.e. buy)
-                    product2_amount = max(product2_max_sell, -round(product1_max_buy * current_ratio))  # Sell
-                    product1_amount = min(product1_max_buy, round(product2_max_sell / current_ratio))   # Buy
+                    product2_amount = max(product2_sell_limit, -round(product1_buy_limit * current_ratio))  # Sell
+                    product1_amount = min(product1_buy_limit, round(product2_sell_limit / current_ratio))   # Buy
                     return product1_amount, product2_amount
                 # Enter a New Position if Ratio Passes Entry Threshold (Lower)
                 elif z_score < -entry_threshold:
                     # Product 2 Underpriced (i.e. buy) or Product 1 Overpriced (i.e. sell)
-                    product2_amount = min(product2_max_buy, round(product1_max_sell / current_ratio))   # Buy
-                    product1_amount = max(product1_max_sell, -round(product2_max_buy * current_ratio))  # Sell
+                    product2_amount = min(product2_buy_limit, round(product1_sell_limit / current_ratio))   # Buy
+                    product1_amount = max(product1_sell_limit, -round(product2_buy_limit * current_ratio))  # Sell
                     return product1_amount, product2_amount
             # If Z-Score Within Thresholds Or Not Enough History => Don't Buy or Sell
             return 0, 0
