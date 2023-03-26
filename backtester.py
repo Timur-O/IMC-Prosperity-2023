@@ -27,7 +27,11 @@ SYMBOLS = [
     'PINA_COLADAS',
     'DIVING_GEAR',
     'BERRIES',
-    'DOLPHIN_SIGHTINGS'
+    'DOLPHIN_SIGHTINGS',
+    "BAGUETTE",
+    "DIP",
+    "UKULELE",
+    "PICNIC_BASKET"
 ]
 
 
@@ -91,6 +95,7 @@ def process_trades(df_trades, states: dict[int, TradingState], time_limit):
             '',  # trade['seller'],
             time)
         states[time].market_trades[symbol].append(t)
+    return states
 
 
 current_limits = {
@@ -100,6 +105,10 @@ current_limits = {
     'PINA_COLADAS': 300,
     'DIVING_GEAR': 50,
     'BERRIES': 250,
+    "BAGUETTE": 150,
+    "DIP": 300,
+    "UKULELE": 70,
+    "PICNIC_BASKET": 70
 }
 
 
@@ -112,7 +121,7 @@ def simulate_alternative(round_to_sim: int, day: int, trader_to_sim, print_posit
     df_prices = pd.read_csv(prices_path, sep=';')
     df_trades = pd.read_csv(trades_path, sep=';')
     states = process_prices(df_prices, time_limit)
-    process_trades(df_trades, states, time_limit)
+    states = process_trades(df_trades, states, time_limit)
     ref_symbols = list(states[0].position.keys())
     profits_by_symbol: dict[int, dict[str, float]] = {0: dict(zip(ref_symbols, [0.0] * len(ref_symbols)))}
     max_time = max(list(states.keys()))
@@ -351,8 +360,8 @@ if __name__ == "__main__":
 
     trader_val = Trader()
     time_inp = int(input("Input a timestamp to end (blank for 999000): ") or 999000)
-    rnd_inp = int(input("Input a round (blank for 3): ") or 3)
-    day_inp = int(input("Input a day (blank for random): ") or random.randint(0, 2))
+    rnd_inp = int(input("Input a round (blank for 4): ") or 4)
+    day_inp = int(input("Input a day (blank for random): ") or random.randint(1, 3))
 
     if test_multiple_values:
         prod_val = str(input("Input a product: "))

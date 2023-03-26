@@ -30,7 +30,11 @@ class Trader:
             "COCONUTS": 600,
             "PINA_COLADAS": 300,
             "BERRIES": 250,
-            "DIVING_GEAR": 50
+            "DIVING_GEAR": 50,
+            "BAGUETTE": 150,
+            "DIP": 300,
+            "UKULELE": 70,
+            "PICNIC_BASKET": 70
         }
 
         self.historicalOBV: Dict[str, List[float]] = {
@@ -39,7 +43,11 @@ class Trader:
             "COCONUTS": [0],
             "PINA_COLADAS": [0],
             "BERRIES": [0],
-            "DIVING_GEAR": [0]
+            "DIVING_GEAR": [0],
+            "BAGUETTE": [0],
+            "DIP": [0],
+            "UKULELE": [0],
+            "PICNIC_BASKET": [0]
         }
 
         self.lastUsedOBVPrice: Dict[str, float] = {
@@ -48,7 +56,11 @@ class Trader:
             "COCONUTS": 0.0,
             "PINA_COLADAS": 0.0,
             "BERRIES": 0.0,
-            "DIVING_GEAR": 0.0
+            "DIVING_GEAR": 0.0,
+            "BAGUETTE": 0.0,
+            "DIP": 0.0,
+            "UKULELE": 0.0,
+            "PICNIC_BASKET": 0.0
         }
 
         self.historicalObservations: Dict[str, List[int]] = {
@@ -61,7 +73,11 @@ class Trader:
             "COCONUTS": [],
             "PINA_COLADAS": [],
             "BERRIES": [],
-            "DIVING_GEAR": []
+            "DIVING_GEAR": [],
+            "BAGUETTE": [],
+            "DIP": [],
+            "UKULELE": [],
+            "PICNIC_BASKET": []
         }
 
         self.historicalBestBid: Dict[str, List[int]] = {
@@ -70,7 +86,11 @@ class Trader:
             "COCONUTS": [],
             "PINA_COLADAS": [],
             "BERRIES": [],
-            "DIVING_GEAR": []
+            "DIVING_GEAR": [],
+            "BAGUETTE": [],
+            "DIP": [],
+            "UKULELE": [],
+            "PICNIC_BASKET": []
         }
 
         self.historicalPrice: Dict[str, List[float]] = {
@@ -79,7 +99,11 @@ class Trader:
             "COCONUTS": [],
             "PINA_COLADAS": [],
             "BERRIES": [],
-            "DIVING_GEAR": []
+            "DIVING_GEAR": [],
+            "BAGUETTE": [],
+            "DIP": [],
+            "UKULELE": [],
+            "PICNIC_BASKET": []
         }
 
         self.historicalPairRatios: Dict[str, List[float]] = {}
@@ -422,7 +446,11 @@ class Trader:
             "COCONUTS": 0,
             "PINA_COLADAS": 0,
             "BERRIES": 0,
-            "DIVING_GEAR": 0
+            "DIVING_GEAR": 0,
+            "BAGUETTE": 0,
+            "DIP": 0,
+            "UKULELE": 0,
+            "PICNIC_BASKET": 0
         }
 
         # Calculate and keep track of product values
