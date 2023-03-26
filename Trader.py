@@ -406,7 +406,7 @@ class Trader:
         amounts['PEARLS'] = self.calculate_arbitrage_amount('PEARLS', 10000.00, state)
 
         # Simple Price Direction Indication via Order Book for Bananas
-        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 2, 100, state)
+        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 2, 0, state)
 
         # Pair Trading w/ Z-Score for Coconuts and Pina Coladas
         amounts['COCONUTS'], amounts['PINA_COLADAS'] = self.calculate_pair_trading_amounts('COCONUTS',
