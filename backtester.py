@@ -3,6 +3,8 @@
         * https://github.com/n-0/backtest-imc-prosperity-2023
         * https://github.com/BRCSmith/backtest-imc-prosperity-2023
 """
+from matplotlib import pyplot as plt
+
 from Trader import Trader
 
 from datamodel import *
@@ -103,9 +105,10 @@ current_limits = {
 
 # Setting a high time_limit can be harder to visualize
 # print_position prints the position before! every Trader.run
-def simulate_alternative(round: int, day: int, trader, print_position=False, time_limit=999900, end_liquidation=True):
-    prices_path = f"{TRAINING_DATA_PREFIX}/prices_round_{round}_day_{day}.csv"
-    trades_path = f"{TRAINING_DATA_PREFIX}/trades_round_{round}_day_{day}_nn.csv"
+def simulate_alternative(round_to_sim: int, day: int, trader_to_sim, print_position=False, time_limit=999900,
+                         end_liquidation=True, value_for_test: float = None):
+    prices_path = f"{TRAINING_DATA_PREFIX}/prices_round_{round_to_sim}_day_{day}.csv"
+    trades_path = f"{TRAINING_DATA_PREFIX}/trades_round_{round_to_sim}_day_{day}_nn.csv"
     df_prices = pd.read_csv(prices_path, sep=';')
     df_trades = pd.read_csv(trades_path, sep=';')
     states = process_prices(df_prices, time_limit)
@@ -115,7 +118,7 @@ def simulate_alternative(round: int, day: int, trader, print_position=False, tim
     max_time = max(list(states.keys()))
     for time, state in states.items():
         position = copy.deepcopy(state.position)
-        orders = trader.run(state)
+        orders = trader_to_sim.run(state, value_for_test)
         trades = clear_order_book(orders, state.order_depths, time)
         if print_position:
             print(position)
@@ -134,8 +137,8 @@ def simulate_alternative(round: int, day: int, trader, print_position=False, tim
                     trade_str = ', '.join("%s: %s" % item for item in trade_vars.items())
                     print(f'Stopped at the following trade: {trade_str}')
                     print(f"All trades that were sent:")
-                    for trade in trades:
-                        trade_vars = vars(trade)
+                    for trade_inner in trades:
+                        trade_vars = vars(trade_inner)
                         trades_str = ', '.join("%s: %s" % item for item in trade_vars.items())
                         print(trades_str)
                     break
@@ -151,7 +154,7 @@ def simulate_alternative(round: int, day: int, trader, print_position=False, tim
                 liquidate_leftovers(position, profits_by_symbol, state, time)
         if states.get(time + TIME_DELTA) is not None:
             states[time + TIME_DELTA].position = copy.deepcopy(position)
-    create_log_file(states, day, profits_by_symbol, trader)
+    return create_log_file(states, day, profits_by_symbol, trader_to_sim)
 
 
 def liquidate_leftovers(position: dict[Product, Position], profits_by_symbol: dict[int, dict[str, float]],
@@ -187,8 +190,8 @@ def liquidate_leftovers(position: dict[Product, Position], profits_by_symbol: di
                             buy_order_price]
                         liquidated_position[symbol] += state.order_depths[symbol].buy_orders[buy_order_price]
                 if liquidated_position[symbol] < 0:
-                    print(
-                        f'Unable to liquidate all SHORT positions for {symbol}, left with {liquidated_position[symbol]}')
+                    print(f'Unable to liquidate all SHORT positions for {symbol},'
+                          f' left with {liquidated_position[symbol]}')
     print(f'\n')
 
 
@@ -205,8 +208,10 @@ def cleanup_order_volumes(org_orders: List[Order]) -> List[Order]:
     return orders
 
 
-def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[str, OrderDepth], time: int) -> list[
-    Trade]:
+def clear_order_book(trader_orders: dict[str, List[Order]],
+                     order_depth: dict[str, OrderDepth],
+                     time: int
+                     ) -> list[Trade]:
     trades = []
     for symbol in trader_orders.keys():
         if order_depth.get(symbol) is not None:
@@ -237,26 +242,28 @@ def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[st
     return trades
 
 
-csv_header = "day;timestamp;product;bid_price_1;bid_volume_1;bid_price_2;bid_volume_2;bid_price_3;bid_volume_3;ask_price_1;ask_volume_1;ask_price_2;ask_volume_2;ask_price_3;ask_volume_3;mid_price;profit_and_loss"
+csv_header = "day;timestamp;product;bid_price_1;bid_volume_1;bid_price_2;bid_volume_2;bid_price_3;bid_volume_3;" \
+             "ask_price_1;ask_volume_1;ask_price_2;ask_volume_2;ask_price_3;ask_volume_3;mid_price;profit_and_loss"
 log_header = [
     'Sandbox logs:\n',
     '0 OpenBLAS WARNING - could not determine the L2 cache size on this system, assuming 256k\n',
     'START RequestId: 8ab36ff8-b4e6-42d4-b012-e6ad69c42085 Version: $LATEST\n',
     'END RequestId: 8ab36ff8-b4e6-42d4-b012-e6ad69c42085\n',
-    'REPORT RequestId: 8ab36ff8-b4e6-42d4-b012-e6ad69c42085	Duration: 18.73 ms	Billed Duration: 19 ms	Memory Size: 128 MB	Max Memory Used: 94 MB	Init Duration: 1574.09 ms\n',
+    'REPORT RequestId: 8ab36ff8-b4e6-42d4-b012-e6ad69c42085	Duration: 18.73 ms	Billed Duration: 19 ms	Memory Size: '
+    '128 MB	Max Memory Used: 94 MB	Init Duration: 1574.09 ms\n',
 ]
 
 
-def create_log_file(states: dict[int, TradingState], day, profits: dict[int, dict[str, float]], trader: Trader):
+def create_log_file(states: dict[int, TradingState], day, profits: dict[int, dict[str, float]], trader_in_log: Trader):
     file_name = uuid.uuid4()
     with open(f'./logs/{file_name}.log', 'w', encoding="utf-8", newline='\n') as f:
         f.writelines(log_header)
         f.write('\n')
         for time, state in states.items():
-            if hasattr(trader, 'logger'):
-                if hasattr(trader.logger, 'local_logs') is not None:
-                    if trader.logger.local_logs.get(time) is not None:
-                        f.write(f'{time} {trader.logger.local_logs[time]}\n')
+            if hasattr(trader_in_log, 'logger'):
+                if hasattr(trader_in_log.logger, 'local_logs') is not None:
+                    if trader_in_log.logger.local_logs.get(time) is not None:
+                        f.write(f'{time} {trader_in_log.logger.local_logs[time]}\n')
                         continue
             if time != 0:
                 f.write(f'{time}\n')
@@ -303,17 +310,47 @@ def create_log_file(states: dict[int, TradingState], day, profits: dict[int, dic
                     max_bid = max(bids_prices)
                     median_price = statistics.median([min_ask, max_bid])
                     f.write(f'{median_price};{profits[time][symbol]}\n')
-                if time == inp:
+                if time == time_inp:
                     print(f'Final profit for {symbol} = {profits[time][symbol]}')
-        print(f"\nSimulation on round {rnd} day {day} for time {inp} complete")
+        print(f"\nSimulation on round {rnd_inp} day {day} for time {time_inp} complete")
+
+        return profits
+
+
+def value_optimization_tester(trader_to_use: Trader, product: str, min_value: float, max_value: float, change_val: float):
+    profits_for_product = []
+
+    curr_value = min_value
+    while curr_value <= max_value:
+        profits = simulate_alternative(rnd_inp, day_inp, trader_to_use, False, time_inp, True, curr_value)
+        profits_for_product.append(profits[time_inp][product])
+
+        # Increment
+        curr_value += change_val
+
+    plt.title(product + ": " + str(min_value) + "-" + str(max_value))
+    plt.plot(profits_for_product)
+    plt.show()
+
+    print(product, "Min:", min_value, ", Max:", max_value, "Results:", profits_for_product)
 
 
 # Adjust accordingly the round and day to your needs
 if __name__ == "__main__":
-    trader = Trader()
-    inp = int(input("Input a timestamp to end (blank for 999000): ") or 999000)
-    rnd = int(input("Input a round (blank for 3): ") or 3)
-    day = int(input("Input a day (blank for random): ") or random.randint(0, 2))
-    print(f"Running simulation on round {rnd} day {day} for time {inp}")
-    print("Remember to change the trader import")
-    simulate_alternative(rnd, day, trader, False, inp)
+    test_multiple_values = bool(input("Do you want to test multiple values (blank for False): ") or False)
+
+    trader_val = Trader()
+    time_inp = int(input("Input a timestamp to end (blank for 999000): ") or 999000)
+    rnd_inp = int(input("Input a round (blank for 3): ") or 3)
+    day_inp = int(input("Input a day (blank for random): ") or random.randint(0, 2))
+
+    if test_multiple_values:
+        prod_val = str(input("Input a product: "))
+        min_val = float(input("Input a minimum value: "))
+        max_val = float(input("Input a maximum value: "))
+        change_val = float(input("How much should the value change by (blank for 1): ") or 1.0)
+        value_optimization_tester(trader_val, prod_val, min_val, max_val, change_val)
+    else:
+        print(f"Running simulation on round {rnd_inp} day {day_inp} for time {time_inp}")
+        print("Remember to change the trader import")
+        simulate_alternative(rnd_inp, day_inp, trader_val, False, time_inp)

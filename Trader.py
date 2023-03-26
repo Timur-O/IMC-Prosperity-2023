@@ -51,6 +51,15 @@ class Trader:
             "DIVING_GEAR": [0]
         }
 
+        self.lastUsedOBVPrice: Dict[str, float] = {
+            "PEARLS": 0.0,
+            "BANANAS": 0.0,
+            "COCONUTS": 0.0,
+            "PINA_COLADAS": 0.0,
+            "BERRIES": 0.0,
+            "DIVING_GEAR": 0.0
+        }
+
         self.historicalObservations: Dict[str, List[int]] = {
             'DOLPHIN_SIGHTINGS': []
         }
@@ -86,9 +95,11 @@ class Trader:
         # Keep Track of OBV
         current_volume: int = sum(order_depth.buy_orders.values()) + abs(sum(order_depth.sell_orders.values()))
         if len(self.historicalPrice[product]) > 1:
-            price_diff: float = self.historicalPrice[product][-1] - self.historicalPrice[product][-2]
-            newOBV: float = self.historicalOBV[product][-1] + current_volume * obv_sign(price_diff)
-            self.historicalOBV[product].append(newOBV)
+            if self.historicalPrice[product][-1] != self.lastUsedOBVPrice[product]:
+                price_diff: float = self.historicalPrice[product][-1] - self.lastUsedOBVPrice[product]
+                newOBV: float = self.historicalOBV[product][-1] + current_volume * obv_sign(price_diff)
+                self.lastUsedOBVPrice[product] = self.historicalPrice[product][-1]
+                self.historicalOBV[product].append(newOBV)
         elif len(self.historicalPrice[product]) == 1:
             price_diff: float = self.historicalPrice[product][-1]
             newOBV: float = current_volume * obv_sign(price_diff)
@@ -366,7 +377,7 @@ class Trader:
 
         return amount
 
-    def run(self, state: TradingState) -> Dict[str, List[Order]]:
+    def run(self, state: TradingState, value_to_test: float = None) -> Dict[str, List[Order]]:
         """
         Only method required. It takes all buy and sell orders for all symbols as an input,
         and outputs a list of orders to be sent
@@ -395,7 +406,7 @@ class Trader:
         amounts['PEARLS'] = self.calculate_arbitrage_amount('PEARLS', 10000.00, state)
 
         # Simple Price Direction Indication via Order Book for Bananas
-        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 1, 3000, state)
+        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 2, 100, state)
 
         # Pair Trading w/ Z-Score for Coconuts and Pina Coladas
         amounts['COCONUTS'], amounts['PINA_COLADAS'] = self.calculate_pair_trading_amounts('COCONUTS',

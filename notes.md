@@ -1,9 +1,5 @@
 ## Ideas:
-* Avellaneda & Stoikov Market-Making Strategy 
-
-#### ALL: (Requires Back-Testing)
-  * Find optimal history amount
-  * Find optimal thresholds
+* Avellaneda & Stoikov Market-Making Strategy
 
 #### Pair Trading:
   * Make sure the actual amount available matches returned values for _amount variables
