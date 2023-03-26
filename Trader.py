@@ -417,7 +417,7 @@ class Trader:
                                                                                            state)
 
         # Time-Based Trading for Mayberries
-        amounts['BERRIES'] = self.calculate_time_based_amount('BERRIES', 200000, 500000, state)
+        amounts['BERRIES'] = self.calculate_time_based_amount('BERRIES', 132000, 504000, state)
 
         # Mean Reversion Based Tracking on Dolphin Sightings to Calculate Price of Diving Gear
         amounts['DIVING_GEAR'] = self.calculate_mean_reversion_amount('DOLPHIN_SIGHTINGS',
