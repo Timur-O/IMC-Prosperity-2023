@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Dict, List, Tuple
 
-from datamodel import OrderDepth, TradingState, Order, Position
+from datamodel import OrderDepth, TradingState, Order, Position, Time
 
 
 def obv_sign(closing_diff: float) -> int:
@@ -339,6 +339,26 @@ class Trader:
                     else:
                         break
 
+    # Calculate the amount to buy/sell using time
+    def calculate_time_based_amount(self, product: str, buy_time: Time, sell_time: Time, state: TradingState):
+        # Initialize the amount
+        amount: int = 0
+
+        # Get and calculate limits
+        position: int = get_position(product, state)
+        limit: int = self.limits[product]
+        max_buy: int = limit - position
+        max_sell: int = -limit - position
+
+        # Buy if its buy time
+        if state.timestamp == buy_time:
+            amount = max_buy
+        # Sell if its sell time
+        elif state.timestamp == sell_time:
+            amount = max_sell
+
+        return amount
+
     def run(self, state: TradingState) -> Dict[str, List[Order]]:
         """
         Only method required. It takes all buy and sell orders for all symbols as an input,
@@ -377,6 +397,9 @@ class Trader:
                                                                                            1,
                                                                                            2000,
                                                                                            state)
+
+        # Time-Based Trading for Mayberries
+        amounts['BERRIES'] = self.calculate_time_based_amount('BERRIES', 200000, 500000, state)
 
         # Make purchases for each product based on previously calculated amounts
         for product in state.order_depths.keys():
