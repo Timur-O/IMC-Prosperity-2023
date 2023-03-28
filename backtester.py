@@ -461,7 +461,86 @@ def create_log_file(round_to_sim: int, day_to_sim: int, states: dict[int, Tradin
         return profits_by_symbol
 
 
-def value_optimization_tester(trader_to_use: Trader,
+def value_optimization_tester_one(trader_to_use: Trader,
+                              product: str,
+                              param1_min: float,
+                              param1_max: float,
+                              param1_step: float):
+    profits = []
+    params = []
+
+    for param1 in np.arange(param1_min, param1_max + param1_step, param1_step):
+        curr_params = [param1]
+        params.append(curr_params)
+
+        curr_profits = []
+        for day in [1, 2, 3]:
+            result = simulate_alternative(rnd_inp, day, trader_to_use, time_inp, False, False, curr_params[0])
+
+            if product == 'CPC':
+                curr_profit = result[time_inp]['COCONUTS'] + result[time_inp]['PINA_COLADAS']
+            elif product == 'BDUP':
+                curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
+            else:
+                curr_profit = result[time_inp][product]
+
+            curr_profits.append(curr_profit)
+
+        avg_profit = np.mean(curr_profits)
+        profits.append(avg_profit)
+
+    best_params = params[np.argmax(profits)]
+    best_profit = np.max(profits)
+
+    print("Best Params: ", best_params)
+    print("Max Profit: ", best_profit)
+
+    return best_params, best_profit
+
+
+def value_optimization_tester_two(trader_to_use: Trader,
+                              product: str,
+                              param1_min: float,
+                              param1_max: float,
+                              param1_step: float,
+                              param2_min: float,
+                              param2_max: float,
+                              param2_step: float):
+    profits = []
+    params = []
+
+    for param1 in np.arange(param1_min, param1_max + param1_step, param1_step):
+        for param2 in np.arange(param2_min, param2_max + param2_step, param2_step):
+            curr_params = [param1, param2]
+            params.append(curr_params)
+
+            curr_profits = []
+            for day in [1, 2, 3]:
+                result = simulate_alternative(rnd_inp, day, trader_to_use, time_inp, False, False, curr_params[0],
+                                              curr_params[1])
+
+                if product == 'CPC':
+                    curr_profit = result[time_inp]['COCONUTS'] + result[time_inp]['PINA_COLADAS']
+                elif product == 'BDUP':
+                    curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
+                else:
+                    curr_profit = result[time_inp][product]
+
+                curr_profits.append(curr_profit)
+
+            avg_profit = np.mean(curr_profits)
+            profits.append(avg_profit)
+
+    best_params = params[np.argmax(profits)]
+    best_profit = np.max(profits)
+
+    print("Best Params: ", best_params)
+    print("Max Profit: ", best_profit)
+
+    return best_params, best_profit
+
+
+def value_optimization_tester_three(trader_to_use: Trader,
                               product: str,
                               param1_min: float,
                               param1_max: float,
@@ -520,16 +599,26 @@ if __name__ == "__main__":
 
     if test_multiple_values:
         prod_inp = str(input("Input a product: "))
+        num_inp = int(input("Input a number of values to test (blank for 3): ") or 3)
+
         min_inp_1 = float(input("Input a minimum value 1: "))
         max_inp_1 = float(input("Input a maximum value 1: "))
         change_inp_1 = float(input("How much should the value 1 change by (blank for 1): ") or 1.0)
-        min_inp_2 = float(input("Input a minimum value 2: "))
-        max_inp_2 = float(input("Input a maximum value 2: "))
-        change_inp_2 = float(input("How much should the value 2 change by (blank for 1): ") or 1.0)
-        min_inp_3 = float(input("Input a minimum value 3: "))
-        max_inp_3 = float(input("Input a maximum value 3: "))
-        change_inp_3 = float(input("How much should the value 3 change by (blank for 1): ") or 1.0)
-        value_optimization_tester(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1, min_inp_2, max_inp_2, change_inp_2, min_inp_3, max_inp_3, change_inp_3)
+
+        if num_inp == 1:
+            value_optimization_tester_one(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1)
+        elif num_inp >= 2:
+            min_inp_2 = float(input("Input a minimum value 2: "))
+            max_inp_2 = float(input("Input a maximum value 2: "))
+            change_inp_2 = float(input("How much should the value 2 change by (blank for 1): ") or 1.0)
+
+            if num_inp == 2:
+                value_optimization_tester_two(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1, min_inp_2, max_inp_2, change_inp_2)
+            else:
+                min_inp_3 = float(input("Input a minimum value 3: "))
+                max_inp_3 = float(input("Input a maximum value 3: "))
+                change_inp_3 = float(input("How much should the value 3 change by (blank for 1): ") or 1.0)
+                value_optimization_tester_three(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1, min_inp_2, max_inp_2, change_inp_2, min_inp_3, max_inp_3, change_inp_3)
     else:
         print(f"Running simulation on round {rnd_inp} day {day_inp} for time {time_inp}")
         print("Remember to change the trader import")
