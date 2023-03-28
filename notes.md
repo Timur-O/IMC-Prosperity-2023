@@ -32,3 +32,13 @@
 #### DIVING GEAR:
   * Track DOLPHIN SIGHTINGS, trade based on that:
     * Bollinger Bands Mean Reversion to decide when to buy and sell
+
+---
+CPC:
+Simulation on round 4 day 1 for time 99000 complete
+Best Params:  [2.0, 1.0, 500.0]
+Max Profit:  13678.0
+
+Bananas:
+Best Params:  [0.0]
+Max Profit:  18950.5

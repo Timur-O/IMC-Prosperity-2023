@@ -411,6 +411,66 @@ class Trader:
 
         return amount
 
+    # Calculate the amount to buy/sell using simple gradient calculations on a tracked product
+    def calculate_gradient_based_tracking_amount(self,
+                                                 tracked_product: str,
+                                                 traded_product: str,
+                                                 buy_threshold: float,
+                                                 sell_threshold: float,
+                                                 amount_of_time_for_history: int,
+                                                 state: TradingState) -> int:
+        # Calculate gradient
+        if len(self.historicalObservations[tracked_product]) > amount_of_time_for_history:
+            gradient = np.gradient(self.historicalObservations[tracked_product][-amount_of_time_for_history:])
+            curr_gradient = gradient[-1]
+        else:
+            return 0
+
+        # Get all values for the product
+        order_depth: OrderDepth = state.order_depths[traded_product]
+        num_sell: int = len(order_depth.sell_orders)
+        num_buy: int = len(order_depth.buy_orders)
+        position: int = get_position(traded_product, state)
+
+        # Get and calculate limits
+        limit: int = self.limits[traded_product]
+        max_buy: int = limit - position
+        max_sell: int = -limit - position
+
+        # Get general info
+        sorted_asks: List[int] = sorted(set(order_depth.sell_orders.keys()))
+        sorted_bids: List[int] = sorted(set(order_depth.buy_orders.keys()), reverse=True)
+
+        # Initialize result
+        amount: int = 0
+
+        if curr_gradient > buy_threshold:
+            # Buy
+            order_counter: int = 0
+            while (max_buy > 0) and (order_counter < num_sell):
+                curr_ask: int = sorted_asks[order_counter]
+                curr_volume: int = max(order_depth.sell_orders[curr_ask], -max_buy)
+
+                amount += -curr_volume
+
+                # Increment Counter
+                order_counter += 1
+                max_buy += curr_volume
+        elif curr_gradient < sell_threshold:
+            # Sell
+            order_counter: int = 0
+            while (max_sell < 0) and (order_counter < num_buy):
+                curr_bid: int = sorted_bids[order_counter]
+                curr_volume: int = min(order_depth.buy_orders[curr_bid], -max_sell)
+
+                amount += -curr_volume
+
+                # Increment Counter
+                order_counter += 1
+                max_sell += curr_volume
+
+        return amount
+
     # Calculate the amount to buy/sell using time
     def calculate_time_based_amount(self, product: str, buy_time: Time, sell_time: Time, state: TradingState):
         # Initialize the amount
@@ -431,7 +491,107 @@ class Trader:
 
         return amount
 
-    def run(self, state: TradingState, value_to_test: float = None) -> Dict[str, List[Order]]:
+    # Calculate the amount to buy/sell using statistical arbitrage
+    def calculate_statistical_arbitrage_amount(self,
+                                               product1: str,
+                                               product2: str,
+                                               product3: str,
+                                               product4: str,
+                                               distance_from_usual_sum: int,
+                                               state: TradingState
+                                               ) -> Tuple[int, int, int, int]:
+        # Get all values for the products
+        order_depth1: OrderDepth = state.order_depths[product1]
+        order_depth2: OrderDepth = state.order_depths[product2]
+        order_depth3: OrderDepth = state.order_depths[product3]
+        order_depth4: OrderDepth = state.order_depths[product4]
+
+        curr_price1: float = self.historicalPrice[product1][-1]
+        curr_price2: float = self.historicalPrice[product2][-1]
+        curr_price3: float = self.historicalPrice[product3][-1]
+        curr_price4: float = self.historicalPrice[product4][-1]
+
+        # Get general info
+        sorted_asks1: List[int] = sorted(set(order_depth1.sell_orders.keys()))
+        sorted_bids1: List[int] = sorted(set(order_depth1.buy_orders.keys()), reverse=True)
+        sorted_asks2: List[int] = sorted(set(order_depth2.sell_orders.keys()))
+        sorted_bids2: List[int] = sorted(set(order_depth2.buy_orders.keys()), reverse=True)
+        sorted_asks3: List[int] = sorted(set(order_depth3.sell_orders.keys()))
+        sorted_bids3: List[int] = sorted(set(order_depth3.buy_orders.keys()), reverse=True)
+        sorted_asks4: List[int] = sorted(set(order_depth4.sell_orders.keys()))
+        sorted_bids4: List[int] = sorted(set(order_depth4.buy_orders.keys()), reverse=True)
+
+        # Get and calculate limits
+        position1: int = get_position(product1, state)
+        position2: int = get_position(product2, state)
+        position3: int = get_position(product3, state)
+        position4: int = get_position(product4, state)
+
+        limit1: int = self.limits[product1]
+        limit2: int = self.limits[product2]
+        limit3: int = self.limits[product3]
+        limit4: int = self.limits[product4]
+
+        max_buy1: int = limit1 - position1
+        max_buy2: int = limit2 - position2
+        max_buy3: int = limit3 - position3
+        max_buy4: int = limit4 - position4
+
+        max_sell1: int = -limit1 - position1
+        max_sell2: int = -limit2 - position2
+        max_sell3: int = -limit3 - position3
+        max_sell4: int = -limit4 - position4
+
+        product1_max_buy = min(max_buy1, sorted_bids1[0])
+        product2_max_buy = min(max_buy2, sorted_bids2[0])
+        product3_max_buy = min(max_buy3, sorted_bids3[0])
+        product4_max_buy = min(max_buy4, sorted_bids4[0])
+
+        product1_max_sell = max(max_sell1, sorted_asks1[0])
+        product2_max_sell = max(max_sell2, sorted_asks2[0])
+        product3_max_sell = max(max_sell3, sorted_asks3[0])
+        product4_max_sell = max(max_sell4, sorted_asks4[0])
+
+        sum_value: float = (2 * curr_price1) + (4 * curr_price2) + curr_price3
+
+        print("Sum", sum_value)
+        print("Curr Price 4", curr_price4)
+
+        if sum_value < (curr_price4 - distance_from_usual_sum):
+            # Sell Product 4
+            product4_target_buy = min(product4_max_buy,
+                                      round(product1_max_sell / 2),
+                                      round(product2_max_sell / 4),
+                                      product3_max_sell)
+            # Buy 2 * Product 1, 4 * Product 2, 1 * Product 3
+            product1_target_sell = 2 * product4_target_buy
+            product2_target_sell = 4 * product4_target_buy
+            product3_target_sell = product4_target_buy
+
+            return product1_target_sell, product2_target_sell, product3_target_sell, product4_target_buy
+        elif sum_value > (curr_price4 + distance_from_usual_sum):
+            # Buy Product 4
+            product4_target_sell = min(product4_max_sell,
+                                       round(product1_max_buy / 2),
+                                       round(product2_max_buy / 4),
+                                       product3_max_buy)
+            # Sell 2 * Product 1, 4 * Product 2, 1 * Product 3
+            product1_target_buy = 2 * product4_target_sell
+            product2_target_buy = 4 * product4_target_sell
+            product3_target_buy = product4_target_sell
+
+            return product1_target_buy, product2_target_buy, product3_target_buy, product4_target_sell
+        else:
+            # Exit Position
+            return -position1, -position2, -position3, -position4
+
+
+    def run(self,
+            state: TradingState,
+            value_to_test_1: float = None,
+            value_to_test_2: float = None,
+            value_to_test_3: float = None
+            ) -> Dict[str, List[Order]]:
         """
         Only method required. It takes all buy and sell orders for all symbols as an input,
         and outputs a list of orders to be sent
@@ -484,6 +644,14 @@ class Trader:
                                                                       50,
                                                                       150,
                                                                       state)
+
+        amounts['BAGUETTE'], amounts['DIP'], amounts['UKULELE'], amounts['PICNIC_BASKET'] = \
+            self.calculate_statistical_arbitrage_amount('BAGUETTE',
+                                                        'DIP',
+                                                        'UKULELE',
+                                                        'PICNIC_BASKET',
+                                                        100,
+                                                        state)
 
         # Make purchases for each product based on previously calculated amounts
         for product in state.order_depths.keys():

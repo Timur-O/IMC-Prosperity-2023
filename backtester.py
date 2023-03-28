@@ -4,7 +4,10 @@
         * https://github.com/BRCSmith/backtest-imc-prosperity-2023
 """
 from datetime import datetime
-from matplotlib import pyplot as plt
+
+import numpy as np
+from matplotlib import pyplot as plt, cm
+from mpl_toolkits.mplot3d import Axes3D
 
 from Trader import Trader
 
@@ -179,7 +182,8 @@ def calc_mid(states: dict[int, TradingState], round_to_sim: int, time: int, max_
 # Setting a high time_limit can be harder to visualize
 # print_position prints the position before! every Trader.run
 def simulate_alternative(round_to_sim: int, day_to_sim: int, trader, time_limit=999900, halfway=False,
-                         print_position=False, value_to_test: float = None):
+                         print_position=False, value_to_test_1: float = None, value_to_test_2: float = None,
+                         value_to_test_3: float = None):
     prices_path = f"{TRAINING_DATA_PREFIX}/prices_round_{round_to_sim}_day_{day_to_sim}.csv"
     trades_path = f"{TRAINING_DATA_PREFIX}/trades_round_{round_to_sim}_day_{day_to_sim}_nn.csv"
     df_prices = pd.read_csv(prices_path, sep=';')
@@ -196,7 +200,7 @@ def simulate_alternative(round_to_sim: int, day_to_sim: int, trader, time_limit=
     unrealized_by_symbol: dict[int, dict[str, float]] = {0: copy.deepcopy(profits_by_symbol[0])}
     for time, state in states.items():
         position = copy.deepcopy(state.position)
-        orders = trader.run(state, value_to_test)
+        orders = trader.run(state, value_to_test_1, value_to_test_2, value_to_test_3)
         trades = clear_order_book(orders, state.order_depths, time, halfway)
         mids = calc_mid(states, round_to_sim, time, max_time)
         if print_position:
@@ -459,31 +463,49 @@ def create_log_file(round_to_sim: int, day_to_sim: int, states: dict[int, Tradin
 
 def value_optimization_tester(trader_to_use: Trader,
                               product: str,
-                              min_value: float,
-                              max_value: float,
-                              change_val: float):
-    profits_for_product = []
-    x_values = []
+                              param1_min: float,
+                              param1_max: float,
+                              param1_step: float,
+                              param2_min: float,
+                              param2_max: float,
+                              param2_step: float,
+                              param3_min: float,
+                              param3_max: float,
+                              param3_step: float):
+    profits = []
+    params = []
 
-    curr_value = min_value
-    while curr_value <= max_value:
-        x_values.append(curr_value)
+    for param1 in np.arange(param1_min, param1_max + param1_step, param1_step):
+        for param2 in np.arange(param2_min, param2_max + param2_step, param2_step):
+            for param3 in np.arange(param3_min, param3_max + param3_step, param3_step):
+                curr_params = [param1, param2, param3]
+                params.append(curr_params)
 
-        profits = simulate_alternative(rnd_inp, day_inp, trader_to_use, time_inp, False, False, curr_value)
-        if product == 'CPC':
-            profits_for_product.append(profits[time_inp]['COCONUTS'] + profits[time_inp]['PINA_COLADAS'])
-        else:
-            profits_for_product.append(profits[time_inp][product])
+                curr_profits = []
+                for day in [1, 2, 3]:
+                    result = simulate_alternative(rnd_inp, day, trader_to_use, time_inp, False, False, curr_params[0],
+                                                  curr_params[1], curr_params[2])
 
-        # Increment
-        curr_value += change_val
+                    if product == 'CPC':
+                        curr_profit = result[time_inp]['COCONUTS'] + result[time_inp]['PINA_COLADAS']
+                    elif product == 'BDUP':
+                        curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
+                    else:
+                        curr_profit = result[time_inp][product]
 
-    plt.title(
-        product + " - " + str(day_inp) + ": " + str(min_value) + " - " + str(max_value) + " Delta: " + str(change_val))
-    plt.plot(x_values, profits_for_product)
-    plt.show()
+                    curr_profits.append(curr_profit)
 
-    print(product, "Min:", min_value, ", Max:", max_value, "Results:", profits_for_product)
+                avg_profit = np.mean(curr_profits)
+                profits.append(avg_profit)
+
+    best_params = params[np.argmax(profits)]
+    best_profit = np.max(profits)
+
+    print("Best Params: ", best_params)
+    print("Max Profit: ", best_profit)
+
+    return best_params, best_profit
+
 
 
 # Adjust accordingly the round and day to your needs
@@ -498,10 +520,16 @@ if __name__ == "__main__":
 
     if test_multiple_values:
         prod_inp = str(input("Input a product: "))
-        min_inp = float(input("Input a minimum value: "))
-        max_inp = float(input("Input a maximum value: "))
-        change_inp = float(input("How much should the value change by (blank for 1): ") or 1.0)
-        value_optimization_tester(trader_val, prod_inp, min_inp, max_inp, change_inp)
+        min_inp_1 = float(input("Input a minimum value 1: "))
+        max_inp_1 = float(input("Input a maximum value 1: "))
+        change_inp_1 = float(input("How much should the value 1 change by (blank for 1): ") or 1.0)
+        min_inp_2 = float(input("Input a minimum value 2: "))
+        max_inp_2 = float(input("Input a maximum value 2: "))
+        change_inp_2 = float(input("How much should the value 2 change by (blank for 1): ") or 1.0)
+        min_inp_3 = float(input("Input a minimum value 3: "))
+        max_inp_3 = float(input("Input a maximum value 3: "))
+        change_inp_3 = float(input("How much should the value 3 change by (blank for 1): ") or 1.0)
+        value_optimization_tester(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1, min_inp_2, max_inp_2, change_inp_2, min_inp_3, max_inp_3, change_inp_3)
     else:
         print(f"Running simulation on round {rnd_inp} day {day_inp} for time {time_inp}")
         print("Remember to change the trader import")
