@@ -1,5 +1,5 @@
 """
-    Based on:
+    "Borrowed" from (with slight adjustments - e.g. code quality + fancy loops):
         * https://github.com/n-0/backtest-imc-prosperity-2023
         * https://github.com/BRCSmith/backtest-imc-prosperity-2023
 """
