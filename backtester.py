@@ -3,20 +3,18 @@
         * https://github.com/n-0/backtest-imc-prosperity-2023
         * https://github.com/BRCSmith/backtest-imc-prosperity-2023
 """
+import copy
+import os
+import random
+import statistics
+import uuid
 from datetime import datetime
 
 import numpy as np
-from matplotlib import pyplot as plt, cm
-from mpl_toolkits.mplot3d import Axes3D
+import pandas as pd
 
 from Trader import Trader
-
 from datamodel import *
-import pandas as pd
-import statistics
-import copy
-import uuid
-import random
 
 # Time-steps used in training files
 TIME_DELTA = 100
@@ -56,7 +54,7 @@ first_round = ['PEARLS', 'BANANAS']
 snd_round = first_round + ['COCONUTS', 'PINA_COLADAS']
 third_round = snd_round + ['DIVING_GEAR', 'DOLPHIN_SIGHTINGS', 'BERRIES']
 fourth_round = third_round + ['BAGUETTE', 'DIP', 'UKULELE', 'PICNIC_BASKET']
-fifth_round = fourth_round  # + secret, maybe pirate gold?
+fifth_round = fourth_round
 
 SYMBOLS_BY_ROUND = {
     1: first_round,
@@ -70,7 +68,7 @@ first_round_pst = ['PEARLS', 'BANANAS']
 snd_round_pst = first_round_pst + ['COCONUTS', 'PINA_COLADAS']
 third_round_pst = snd_round_pst + ['DIVING_GEAR', 'BERRIES']
 fourth_round_pst = third_round_pst + ['BAGUETTE', 'DIP', 'UKULELE', 'PICNIC_BASKET']
-fifth_round_pst = fourth_round_pst  # + secret, maybe pirate gold?
+fifth_round_pst = fourth_round_pst
 
 SYMBOLS_BY_ROUND_POSITIONABLE = {
     1: first_round_pst,
@@ -125,7 +123,7 @@ def process_prices(df_prices, round_to_sim, time_limit) -> dict[int, TradingStat
     return states
 
 
-def process_trades(df_trades, states: dict[int, TradingState], time_limit):
+def process_trades(df_trades, states: dict[int, TradingState], time_limit, name=True):
     for _, trade in df_trades.iterrows():
         time: int = trade['timestamp']
         if time > time_limit:
@@ -133,13 +131,22 @@ def process_trades(df_trades, states: dict[int, TradingState], time_limit):
         symbol = trade['symbol']
         if symbol not in states[time].market_trades:
             states[time].market_trades[symbol] = []
-        t = Trade(
-            symbol,
-            trade['price'],
-            trade['quantity'],
-            '',  # trade['buyer'],
-            '',  # trade['seller'],
-            time)
+        if name:
+            t = Trade(
+                symbol,
+                trade['price'],
+                trade['quantity'],
+                str(trade['buyer']),
+                str(trade['seller']),
+                time)
+        else:
+            t = Trade(
+                symbol,
+                trade['price'],
+                trade['quantity'],
+                '',  # str(trade['buyer']),
+                '',  # str(trade['seller']),
+                time)
         states[time].market_trades[symbol].append(t)
     return states
 
@@ -167,7 +174,6 @@ def calc_mid(states: dict[int, TradingState], round_to_sim: int, time: int, max_
                 states[non_empty_time].order_depths[p_symbol].buy_orders.keys()) == 0:
             # little hack
             if time == 0 or hit_zero and time != max_time:
-                print(p_symbol)
                 hit_zero = True
                 non_empty_time += TIME_DELTA
             else:
@@ -181,15 +187,26 @@ def calc_mid(states: dict[int, TradingState], round_to_sim: int, time: int, max_
 
 # Setting a high time_limit can be harder to visualize
 # print_position prints the position before! every Trader.run
-def simulate_alternative(round_to_sim: int, day_to_sim: int, trader, time_limit=999900, halfway=False,
-                         print_position=False, value_to_test_1: float = None, value_to_test_2: float = None,
+def simulate_alternative(round_to_sim: int,
+                         day_to_sim: int,
+                         trader,
+                         time_limit=999900,
+                         names=True,
+                         halfway=False,
+                         monkeys=False,
+                         monkey_names=['Max', 'Camilla'],
+                         value_to_test_1: float = None,
+                         value_to_test_2: float = None,
                          value_to_test_3: float = None):
-    prices_path = f"{TRAINING_DATA_PREFIX}/prices_round_{round_to_sim}_day_{day_to_sim}.csv"
-    trades_path = f"{TRAINING_DATA_PREFIX}/trades_round_{round_to_sim}_day_{day_to_sim}_nn.csv"
+    prices_path = os.path.join(TRAINING_DATA_PREFIX, f'prices_round_{round_to_sim}_day_{day_to_sim}.csv')
+    trades_path = os.path.join(TRAINING_DATA_PREFIX, f'trades_round_{round_to_sim}_day_{day_to_sim}_wn.csv')
+    if not names:
+        trades_path = os.path.join(TRAINING_DATA_PREFIX, f'trades_round_{round_to_sim}_day_{day_to_sim}_nn.csv')
     df_prices = pd.read_csv(prices_path, sep=';')
-    df_trades = pd.read_csv(trades_path, sep=';')
+    df_trades = pd.read_csv(trades_path, sep=';', dtype={'seller': str, 'buyer': str})
+
     states = process_prices(df_prices, round_to_sim, time_limit)
-    states = process_trades(df_trades, states, time_limit)
+    states = process_trades(df_trades, states, time_limit, names)
     ref_symbols = list(states[0].position.keys())
     max_time = max(list(states.keys()))
 
@@ -198,13 +215,47 @@ def simulate_alternative(round_to_sim: int, day_to_sim: int, trader, time_limit=
     balance_by_symbol: dict[int, dict[str, float]] = {0: copy.deepcopy(profits_by_symbol[0])}
     credit_by_symbol: dict[int, dict[str, float]] = {0: copy.deepcopy(profits_by_symbol[0])}
     unrealized_by_symbol: dict[int, dict[str, float]] = {0: copy.deepcopy(profits_by_symbol[0])}
+
+    states, trader, profits_by_symbol, balance_by_symbol = trades_position_pnl_run(states,
+                                                                                   trader,
+                                                                                   round_to_sim,
+                                                                                   halfway,
+                                                                                   value_to_test_1,
+                                                                                   value_to_test_2,
+                                                                                   value_to_test_3,
+                                                                                   max_time,
+                                                                                   profits_by_symbol,
+                                                                                   balance_by_symbol,
+                                                                                   credit_by_symbol,
+                                                                                   unrealized_by_symbol)
+
+    profits_by_symbol = create_log_file(round_to_sim, day_to_sim, states, profits_by_symbol, balance_by_symbol, trader)
+
+    if monkeys:
+        profit_balance, trades_monkey = monkey_positions(monkey_names, states, round_to_sim, max_time)
+        print(f'PNL + BALANCE monkeys {profit_balance[max_time]}')
+        print(f'Trades monkeys {trades_monkey[max_time]}')
+
+    return profits_by_symbol
+
+
+def trades_position_pnl_run(states: dict[int, TradingState],
+                            trader,
+                            round_to_sim: int,
+                            halfway: bool,
+                            value_to_test_1: float,
+                            value_to_test_2: float,
+                            value_to_test_3: float,
+                            max_time: int,
+                            profits_by_symbol: dict[int, dict[str, float]],
+                            balance_by_symbol: dict[int, dict[str, float]],
+                            credit_by_symbol: dict[int, dict[str, float]],
+                            unrealized_by_symbol: dict[int, dict[str, float]]):
     for time, state in states.items():
         position = copy.deepcopy(state.position)
         orders = trader.run(state, value_to_test_1, value_to_test_2, value_to_test_3)
         trades = clear_order_book(orders, state.order_depths, time, halfway)
         mids = calc_mid(states, round_to_sim, time, max_time)
-        if print_position:
-            print(position)
         if profits_by_symbol.get(time + TIME_DELTA) is None and time != max_time:
             profits_by_symbol[time + TIME_DELTA] = copy.deepcopy(profits_by_symbol[time])
         if credit_by_symbol.get(time + TIME_DELTA) is None and time != max_time:
@@ -243,78 +294,135 @@ def simulate_alternative(round_to_sim: int, day_to_sim: int, trader, time_limit=
             if grouped_by_symbol.get(valid_trade.symbol) is None:
                 grouped_by_symbol[valid_trade.symbol] = []
             grouped_by_symbol[valid_trade.symbol].append(valid_trade)
-            credit_by_symbol[time + FLEX_TIME_DELTA][valid_trade.symbol] += -valid_trade.price * valid_trade.quantity
+            credit_by_symbol[time + FLEX_TIME_DELTA][
+                valid_trade.symbol] += -valid_trade.price * valid_trade.quantity
         if states.get(time + FLEX_TIME_DELTA) is not None:
             states[time + FLEX_TIME_DELTA].own_trades = grouped_by_symbol
             for p_symbol in SYMBOLS_BY_ROUND_POSITIONABLE[round_to_sim]:
                 unrealized_by_symbol[time + FLEX_TIME_DELTA][p_symbol] = mids[p_symbol] * position[p_symbol]
                 if position[p_symbol] == 0 and states[time].position[p_symbol] != 0:
-                    profits_by_symbol[time + FLEX_TIME_DELTA][p_symbol] += credit_by_symbol[time + FLEX_TIME_DELTA][
-                        p_symbol]  # +unrealized_by_symbol[time + FLEX_TIME_DELTA][p_symbol]
+                    profits_by_symbol[time + FLEX_TIME_DELTA][p_symbol] += \
+                        credit_by_symbol[time + FLEX_TIME_DELTA][p_symbol]
                     credit_by_symbol[time + FLEX_TIME_DELTA][p_symbol] = 0
                     balance_by_symbol[time + FLEX_TIME_DELTA][p_symbol] = 0
                 else:
-                    balance_by_symbol[time + FLEX_TIME_DELTA][p_symbol] = credit_by_symbol[time + FLEX_TIME_DELTA][
-                                                                             p_symbol] + \
-                                                                         unrealized_by_symbol[time + FLEX_TIME_DELTA][
-                                                                             p_symbol]
+                    balance_by_symbol[time + FLEX_TIME_DELTA][p_symbol] = \
+                        credit_by_symbol[time + FLEX_TIME_DELTA][p_symbol] + \
+                        unrealized_by_symbol[time + FLEX_TIME_DELTA][p_symbol]
 
         if time == max_time:
             print("End of simulation reached. All positions left are liquidated")
             # I have the feeling this already has been done, and only repeats the same values as before
             for o_symbol in position.keys():
-                profits_by_symbol[time + FLEX_TIME_DELTA][o_symbol] += credit_by_symbol[time + FLEX_TIME_DELTA][
-                                                                          o_symbol] + \
-                                                                      unrealized_by_symbol[time + FLEX_TIME_DELTA][
-                                                                          o_symbol]
+                profits_by_symbol[time + FLEX_TIME_DELTA][o_symbol] += \
+                    credit_by_symbol[time + FLEX_TIME_DELTA][o_symbol] + \
+                    unrealized_by_symbol[time + FLEX_TIME_DELTA][o_symbol]
                 balance_by_symbol[time + FLEX_TIME_DELTA][o_symbol] = 0
-                # liquidate_leftovers(position, profits_by_symbol, credit_by_symbol, state, time)
         if states.get(time + FLEX_TIME_DELTA) is not None:
             states[time + FLEX_TIME_DELTA].position = copy.deepcopy(position)
 
-    return create_log_file(round_to_sim, day_to_sim, states, profits_by_symbol, balance_by_symbol, trader)
+    return states, trader, profits_by_symbol, balance_by_symbol
 
 
-def liquidate_leftovers(position: dict[Product, Position], profits_by_symbol: dict[int, dict[str, float]],
-                        state: TradingState, time: int):
-    liquidated_position = copy.deepcopy(position)
-    for symbol in position.keys():
-        if liquidated_position[symbol] != 0:
-            if liquidated_position[symbol] > 0:
-                sorted_sell_prices = list(state.order_depths[symbol].sell_orders.keys())
-                sorted_sell_prices.sort(reverse=True)
-                for ask_order_price in sorted_sell_prices:
-                    if abs(liquidated_position[symbol]) <= abs(state.order_depths[symbol].sell_orders[ask_order_price]):
-                        profits_by_symbol[time][symbol] += ask_order_price * liquidated_position[symbol]
-                        liquidated_position[symbol] = 0
-                        break
+def monkey_positions(monkey_names: list[str],
+                     states: dict[int, TradingState],
+                     round_to_sim: int,
+                     max_time: int):
+    profits_by_symbol: dict[int, dict[str, dict[str, float]]] = {0: {}}
+    balance_by_symbol: dict[int, dict[str, dict[str, float]]] = {0: {}}
+    credit_by_symbol: dict[int, dict[str, dict[str, float]]] = {0: {}}
+    unrealized_by_symbol: dict[int, dict[str, dict[str, float]]] = {0: {}}
+    prev_monkey_positions: dict[str, dict[str, int]] = {}
+    curr_monkey_positions: dict[str, dict[str, int]] = {}
+    trades_by_round: dict[int, dict[str, list[Trade]]] = {0: dict(zip(monkey_names,
+                                                                      [[] for _ in range(len(monkey_names))]
+                                                                      ))}
+    profit_balance: dict[int, dict[str, dict[str, float]]] = {0: {}}
+
+    for monkey in monkey_names:
+        ref_symbols = list(states[0].position.keys())
+        profits_by_symbol[0][monkey] = dict(zip(ref_symbols, [0.0] * len(ref_symbols)))
+        balance_by_symbol[0][monkey] = copy.deepcopy(profits_by_symbol[0][monkey])
+        credit_by_symbol[0][monkey] = copy.deepcopy(profits_by_symbol[0][monkey])
+        unrealized_by_symbol[0][monkey] = copy.deepcopy(profits_by_symbol[0][monkey])
+        profit_balance[0][monkey] = copy.deepcopy(profits_by_symbol[0][monkey])
+        curr_monkey_positions[monkey] = dict(
+            zip(SYMBOLS_BY_ROUND_POSITIONABLE[round_to_sim], [0] * len(SYMBOLS_BY_ROUND_POSITIONABLE[round_to_sim])))
+        prev_monkey_positions[monkey] = copy.deepcopy(curr_monkey_positions[monkey])
+
+    for time, state in states.items():
+        already_calculated = False
+        for monkey in monkey_names:
+            position = copy.deepcopy(curr_monkey_positions[monkey])
+            mids = calc_mid(states, round_to_sim, time, max_time)
+            if trades_by_round.get(time + TIME_DELTA) is None:
+                trades_by_round[time + TIME_DELTA] = copy.deepcopy(trades_by_round[time])
+
+            for p_symbol in POSITIONABLE_SYMBOLS:
+                if already_calculated:
+                    break
+                if state.market_trades.get(p_symbol):
+                    for market_trade in state.market_trades[p_symbol]:
+                        if trades_by_round[time].get(market_trade.buyer) is not None:
+                            trades_by_round[time][market_trade.buyer].append(
+                                Trade(p_symbol, market_trade.price, market_trade.quantity))
+                        if trades_by_round[time].get(market_trade.seller) is not None:
+                            trades_by_round[time][market_trade.seller].append(
+                                Trade(p_symbol, market_trade.price, -market_trade.quantity))
+            already_calculated = True
+
+            if profit_balance.get(time + TIME_DELTA) is None and time != max_time:
+                profit_balance[time + TIME_DELTA] = copy.deepcopy(profit_balance[time])
+            if profits_by_symbol.get(time + TIME_DELTA) is None and time != max_time:
+                profits_by_symbol[time + TIME_DELTA] = copy.deepcopy(profits_by_symbol[time])
+            if credit_by_symbol.get(time + TIME_DELTA) is None and time != max_time:
+                credit_by_symbol[time + TIME_DELTA] = copy.deepcopy(credit_by_symbol[time])
+            if balance_by_symbol.get(time + TIME_DELTA) is None and time != max_time:
+                balance_by_symbol[time + TIME_DELTA] = copy.deepcopy(balance_by_symbol[time])
+            if unrealized_by_symbol.get(time + TIME_DELTA) is None and time != max_time:
+                unrealized_by_symbol[time + TIME_DELTA] = copy.deepcopy(unrealized_by_symbol[time])
+                for p_symbol in SYMBOLS_BY_ROUND_POSITIONABLE[round_to_sim]:
+                    unrealized_by_symbol[time + TIME_DELTA][monkey][p_symbol] = mids[p_symbol] * position[p_symbol]
+            valid_trades = []
+            if trades_by_round[time].get(monkey) is not None:
+                valid_trades = trades_by_round[time][monkey]
+            FLEX_TIME_DELTA = TIME_DELTA
+            if time == max_time:
+                FLEX_TIME_DELTA = 0
+            for valid_trade in valid_trades:
+                position[valid_trade.symbol] += valid_trade.quantity
+                credit_by_symbol[time + FLEX_TIME_DELTA][monkey][
+                    valid_trade.symbol] += -valid_trade.price * valid_trade.quantity
+            if states.get(time + FLEX_TIME_DELTA) is not None:
+                for p_symbol in SYMBOLS_BY_ROUND_POSITIONABLE[round_to_sim]:
+                    unrealized_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] = mids[p_symbol] * position[p_symbol]
+                    if position[p_symbol] == 0 and prev_monkey_positions[monkey][p_symbol] != 0:
+                        profits_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] += \
+                            credit_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol]
+                        credit_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] = 0
+                        balance_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] = 0
                     else:
-                        profits_by_symbol[time][symbol] += ask_order_price * state.order_depths[symbol].sell_orders[
-                            ask_order_price]
-                        liquidated_position[symbol] -= state.order_depths[symbol].sell_orders[ask_order_price]
-                if liquidated_position[symbol] > 0:
-                    print(
-                        f'Unable to liquidate all LONG positions for {symbol}, left with {liquidated_position[symbol]}')
-            else:
-                sorted_buy_prices = list(state.order_depths[symbol].buy_orders.keys())
-                sorted_buy_prices.sort(reverse=True)
-                for buy_order_price in sorted_buy_prices:
-                    if abs(liquidated_position[symbol]) <= abs(state.order_depths[symbol].buy_orders[buy_order_price]):
-                        profits_by_symbol[time][symbol] -= buy_order_price * liquidated_position[symbol]
-                        liquidated_position[symbol] = 0
-                        break
-                    else:
-                        profits_by_symbol[time][symbol] -= buy_order_price * state.order_depths[symbol].buy_orders[
-                            buy_order_price]
-                        liquidated_position[symbol] += state.order_depths[symbol].buy_orders[buy_order_price]
-                if liquidated_position[symbol] < 0:
-                    print(f'Unable to liquidate all SHORT positions for {symbol},'
-                          f' left with {liquidated_position[symbol]}')
-    print(f'\n')
+                        balance_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] = \
+                            credit_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] + \
+                            unrealized_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol]
+                    profit_balance[time + FLEX_TIME_DELTA][monkey][p_symbol] = \
+                        profits_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol] + \
+                        balance_by_symbol[time + FLEX_TIME_DELTA][monkey][p_symbol]
+            prev_monkey_positions[monkey] = copy.deepcopy(curr_monkey_positions[monkey])
+            curr_monkey_positions[monkey] = position
+            if time == max_time:
+                print("End of monkey simulation reached.")
+                # I have the feeling this already has been done, and only repeats the same values as before
+                for o_symbol in position.keys():
+                    profits_by_symbol[time + FLEX_TIME_DELTA][monkey][o_symbol] += \
+                        credit_by_symbol[time + FLEX_TIME_DELTA][monkey][o_symbol] + \
+                        unrealized_by_symbol[time + FLEX_TIME_DELTA][monkey][o_symbol]
+                    balance_by_symbol[time + FLEX_TIME_DELTA][monkey][o_symbol] = 0
+    return profit_balance, trades_by_round
 
 
 def cleanup_order_volumes(org_orders: List[Order]) -> List[Order]:
-    orders = []  # copy.deepcopy(org_orders)
+    orders = []
     for order_1 in org_orders:
         final_order = copy.copy(order_1)
         for order_2 in org_orders:
@@ -342,6 +450,9 @@ def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[st
                         min_ask = min(asks)
                         if order.price <= statistics.median([max_bid, min_ask]):
                             trades.append(Trade(symbol, order.price, order.quantity, "BOT", "YOU", time))
+                        else:
+                            print(f'No matches for order {order} at time {time}')
+                            print(f'Order depth is {order_depth[order.symbol].__dict__}')
                     else:
                         potential_matches = list(
                             filter(lambda o: o[0] == order.price, symbol_order_depth.buy_orders.items()))
@@ -353,6 +464,9 @@ def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[st
                                 # this should be negative
                                 final_volume = -match[1]
                             trades.append(Trade(symbol, order.price, final_volume, "BOT", "YOU", time))
+                        else:
+                            print(f'No matches for order {order} at time {time}')
+                            print(f'Order depth is {order_depth[order.symbol].__dict__}')
                 if order.quantity > 0:
                     if halfway:
                         bids = symbol_order_depth.buy_orders.keys()
@@ -361,6 +475,9 @@ def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[st
                         min_ask = min(asks)
                         if order.price >= statistics.median([max_bid, min_ask]):
                             trades.append(Trade(symbol, order.price, order.quantity, "YOU", "BOT", time))
+                        else:
+                            print(f'No matches for order {order} at time {time}')
+                            print(f'Order depth is {order_depth[order.symbol].__dict__}')
                     else:
                         potential_matches = list(
                             filter(lambda o: o[0] == order.price, symbol_order_depth.sell_orders.items()))
@@ -372,6 +489,9 @@ def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[st
                             else:
                                 final_volume = abs(match[1])
                             trades.append(Trade(symbol, order.price, final_volume, "YOU", "BOT", time))
+                        else:
+                            print(f'No matches for order {order} at time {time}')
+                            print(f'Order depth is {order_depth[order.symbol].__dict__}')
     return trades
 
 
@@ -387,13 +507,17 @@ log_header = [
 ]
 
 
-def create_log_file(round_to_sim: int, day_to_sim: int, states: dict[int, TradingState],
-                    profits_by_symbol: dict[int, dict[str, float]], balance_by_symbol: dict[int, dict[str, float]],
+def create_log_file(round_to_sim: int,
+                    day_to_sim: int,
+                    states: dict[int, TradingState],
+                    profits_by_symbol: dict[int, dict[str, float]],
+                    balance_by_symbol: dict[int, dict[str, float]],
                     trader: Trader):
     file_name = uuid.uuid4()
     time_stamp = datetime.timestamp(datetime.now())
     max_time = max(list(states.keys()))
-    with open(f'./logs/{time_stamp}_{file_name}.log', 'w', encoding="utf-8", newline='\n') as f:
+    log_path = os.path.join('logs', f'{time_stamp}_{file_name}.log')
+    with open(log_path, 'w', encoding="utf-8", newline='\n') as f:
         f.writelines(log_header)
         f.write('\n')
         for time, state in states.items():
@@ -462,10 +586,10 @@ def create_log_file(round_to_sim: int, day_to_sim: int, states: dict[int, Tradin
 
 
 def value_optimization_tester_one(trader_to_use: Trader,
-                              product: str,
-                              param1_min: float,
-                              param1_max: float,
-                              param1_step: float):
+                                  product: str,
+                                  param1_min: float,
+                                  param1_max: float,
+                                  param1_step: float):
     profits = []
     params = []
 
@@ -475,12 +599,20 @@ def value_optimization_tester_one(trader_to_use: Trader,
 
         curr_profits = []
         for day in [1, 2, 3]:
-            result = simulate_alternative(rnd_inp, day, trader_to_use, time_inp, False, False, curr_params[0])
+            result = simulate_alternative(rnd_inp,
+                                          day,
+                                          trader_to_use,
+                                          time_inp,
+                                          names_inp,
+                                          False,
+                                          False,
+                                          curr_params[0])
 
             if product == 'CPC':
                 curr_profit = result[time_inp]['COCONUTS'] + result[time_inp]['PINA_COLADAS']
             elif product == 'BDUP':
-                curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
+                curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + \
+                              result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
             else:
                 curr_profit = result[time_inp][product]
 
@@ -499,13 +631,13 @@ def value_optimization_tester_one(trader_to_use: Trader,
 
 
 def value_optimization_tester_two(trader_to_use: Trader,
-                              product: str,
-                              param1_min: float,
-                              param1_max: float,
-                              param1_step: float,
-                              param2_min: float,
-                              param2_max: float,
-                              param2_step: float):
+                                  product: str,
+                                  param1_min: float,
+                                  param1_max: float,
+                                  param1_step: float,
+                                  param2_min: float,
+                                  param2_max: float,
+                                  param2_step: float):
     profits = []
     params = []
 
@@ -516,13 +648,20 @@ def value_optimization_tester_two(trader_to_use: Trader,
 
             curr_profits = []
             for day in [1, 2, 3]:
-                result = simulate_alternative(rnd_inp, day, trader_to_use, time_inp, False, False, curr_params[0],
+                result = simulate_alternative(rnd_inp, day,
+                                              trader_to_use,
+                                              time_inp,
+                                              names_inp,
+                                              False,
+                                              False,
+                                              curr_params[0],
                                               curr_params[1])
 
                 if product == 'CPC':
                     curr_profit = result[time_inp]['COCONUTS'] + result[time_inp]['PINA_COLADAS']
                 elif product == 'BDUP':
-                    curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
+                    curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + \
+                                  result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
                 else:
                     curr_profit = result[time_inp][product]
 
@@ -541,16 +680,16 @@ def value_optimization_tester_two(trader_to_use: Trader,
 
 
 def value_optimization_tester_three(trader_to_use: Trader,
-                              product: str,
-                              param1_min: float,
-                              param1_max: float,
-                              param1_step: float,
-                              param2_min: float,
-                              param2_max: float,
-                              param2_step: float,
-                              param3_min: float,
-                              param3_max: float,
-                              param3_step: float):
+                                    product: str,
+                                    param1_min: float,
+                                    param1_max: float,
+                                    param1_step: float,
+                                    param2_min: float,
+                                    param2_max: float,
+                                    param2_step: float,
+                                    param3_min: float,
+                                    param3_max: float,
+                                    param3_step: float):
     profits = []
     params = []
 
@@ -562,13 +701,21 @@ def value_optimization_tester_three(trader_to_use: Trader,
 
                 curr_profits = []
                 for day in [1, 2, 3]:
-                    result = simulate_alternative(rnd_inp, day, trader_to_use, time_inp, False, False, curr_params[0],
-                                                  curr_params[1], curr_params[2])
+                    result = simulate_alternative(rnd_inp, day,
+                                                  trader_to_use,
+                                                  time_inp,
+                                                  names_inp,
+                                                  False,
+                                                  False,
+                                                  curr_params[0],
+                                                  curr_params[1],
+                                                  curr_params[2])
 
                     if product == 'CPC':
                         curr_profit = result[time_inp]['COCONUTS'] + result[time_inp]['PINA_COLADAS']
                     elif product == 'BDUP':
-                        curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
+                        curr_profit = result[time_inp]['BAGUETTE'] + result[time_inp]['DIP'] + \
+                                      result[time_inp]['UKULELE'] + result[time_inp]['PICNIC_BASKET']
                     else:
                         curr_profit = result[time_inp][product]
 
@@ -586,7 +733,6 @@ def value_optimization_tester_three(trader_to_use: Trader,
     return best_params, best_profit
 
 
-
 # Adjust accordingly the round and day to your needs
 if __name__ == "__main__":
     test_multiple_values = bool(input("Do you want to test multiple values (blank for False): ") or False)
@@ -595,6 +741,7 @@ if __name__ == "__main__":
     time_inp = int(input("Input a timestamp to end (blank for 999000): ") or 999000)
     rnd_inp = int(input("Input a round (blank for 4): ") or 4)
     day_inp = int(input("Input a day (blank for random): ") or random.randint(1, 3))
+    names_inp = (not bool(input("With bot names (blank for True): "))) or True
     halfway_inp = bool(input("Matching orders halfway (blank for False): ")) or False
 
     if test_multiple_values:
@@ -606,20 +753,41 @@ if __name__ == "__main__":
         change_inp_1 = float(input("How much should the value 1 change by (blank for 1): ") or 1.0)
 
         if num_inp == 1:
-            value_optimization_tester_one(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1)
+            value_optimization_tester_one(trader_val,
+                                          prod_inp,
+                                          min_inp_1,
+                                          max_inp_1,
+                                          change_inp_1)
         elif num_inp >= 2:
             min_inp_2 = float(input("Input a minimum value 2: "))
             max_inp_2 = float(input("Input a maximum value 2: "))
             change_inp_2 = float(input("How much should the value 2 change by (blank for 1): ") or 1.0)
 
             if num_inp == 2:
-                value_optimization_tester_two(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1, min_inp_2, max_inp_2, change_inp_2)
+                value_optimization_tester_two(trader_val,
+                                              prod_inp,
+                                              min_inp_1,
+                                              max_inp_1,
+                                              change_inp_1,
+                                              min_inp_2,
+                                              max_inp_2,
+                                              change_inp_2)
             else:
                 min_inp_3 = float(input("Input a minimum value 3: "))
                 max_inp_3 = float(input("Input a maximum value 3: "))
                 change_inp_3 = float(input("How much should the value 3 change by (blank for 1): ") or 1.0)
-                value_optimization_tester_three(trader_val, prod_inp, min_inp_1, max_inp_1, change_inp_1, min_inp_2, max_inp_2, change_inp_2, min_inp_3, max_inp_3, change_inp_3)
+                value_optimization_tester_three(trader_val,
+                                                prod_inp,
+                                                min_inp_1,
+                                                max_inp_1,
+                                                change_inp_1,
+                                                min_inp_2,
+                                                max_inp_2,
+                                                change_inp_2,
+                                                min_inp_3,
+                                                max_inp_3,
+                                                change_inp_3)
     else:
         print(f"Running simulation on round {rnd_inp} day {day_inp} for time {time_inp}")
         print("Remember to change the trader import")
-        simulate_alternative(rnd_inp, day_inp, trader_val, time_inp, halfway_inp)
+        simulate_alternative(rnd_inp, day_inp, trader_val, time_inp, names_inp, halfway_inp)
