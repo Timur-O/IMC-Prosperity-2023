@@ -79,7 +79,9 @@ SYMBOLS_BY_ROUND_POSITIONABLE = {
 }
 
 
-def process_prices(df_prices, round_to_sim, time_limit) -> dict[int, TradingState]:
+def process_prices(df_prices,
+                   round_to_sim: int,
+                   time_limit: int) -> dict[int, TradingState]:
     states = {}
     for _, row in df_prices.iterrows():
         time: int = int(row["timestamp"])
@@ -123,7 +125,10 @@ def process_prices(df_prices, round_to_sim, time_limit) -> dict[int, TradingStat
     return states
 
 
-def process_trades(df_trades, states: dict[int, TradingState], time_limit, name=True):
+def process_trades(df_trades,
+                   states: dict[int, TradingState],
+                   time_limit,
+                   name=True):
     for _, trade in df_trades.iterrows():
         time: int = trade['timestamp']
         if time > time_limit:
@@ -165,7 +170,10 @@ current_limits = {
 }
 
 
-def calc_mid(states: dict[int, TradingState], round_to_sim: int, time: int, max_time: int) -> dict[str, float]:
+def calc_mid(states: dict[int, TradingState],
+             round_to_sim: int,
+             time: int,
+             max_time: int) -> dict[str, float]:
     medians_by_symbol = {}
     non_empty_time = time
     for p_symbol in SYMBOLS_BY_ROUND_POSITIONABLE[round_to_sim]:
@@ -189,12 +197,13 @@ def calc_mid(states: dict[int, TradingState], round_to_sim: int, time: int, max_
 # print_position prints the position before! every Trader.run
 def simulate_alternative(round_to_sim: int,
                          day_to_sim: int,
+                         time_to_sim: int,
                          trader,
                          time_limit=999900,
                          names=True,
                          halfway=False,
                          monkeys=False,
-                         monkey_names=['Max', 'Camilla'],
+                         monkey_names=('Max', 'Camilla'),
                          value_to_test_1: float = None,
                          value_to_test_2: float = None,
                          value_to_test_3: float = None):
@@ -229,7 +238,7 @@ def simulate_alternative(round_to_sim: int,
                                                                                    credit_by_symbol,
                                                                                    unrealized_by_symbol)
 
-    profits_by_symbol = create_log_file(round_to_sim, day_to_sim, states, profits_by_symbol, balance_by_symbol, trader)
+    profits_by_symbol = create_log_file(round_to_sim, day_to_sim, time_to_sim, states, profits_by_symbol, balance_by_symbol, trader)
 
     if monkeys:
         profit_balance, trades_monkey = monkey_positions(monkey_names, states, round_to_sim, max_time)
@@ -434,7 +443,9 @@ def cleanup_order_volumes(org_orders: List[Order]) -> List[Order]:
     return orders
 
 
-def clear_order_book(trader_orders: dict[str, List[Order]], order_depth: dict[str, OrderDepth], time: int,
+def clear_order_book(trader_orders: dict[str, List[Order]],
+                     order_depth: dict[str, OrderDepth],
+                     time: int,
                      halfway: bool) -> list[Trade]:
     trades = []
     for symbol in trader_orders.keys():
@@ -509,6 +520,7 @@ log_header = [
 
 def create_log_file(round_to_sim: int,
                     day_to_sim: int,
+                    time_to_sim: int,
                     states: dict[int, TradingState],
                     profits_by_symbol: dict[int, dict[str, float]],
                     balance_by_symbol: dict[int, dict[str, float]],
@@ -577,7 +589,7 @@ def create_log_file(round_to_sim: int,
                     if time == max_time:
                         if profits_by_symbol[time].get(symbol) is None:
                             print(f'Final profit for {symbol} = {actual_profit}')
-                if time == time_inp:
+                if time == time_to_sim:
                     print(f'Final profit for {symbol} = {profits_by_symbol[time][symbol]}')
 
         print(f"\nSimulation on round {round_to_sim} day {day_to_sim} for time {max_time} complete")
@@ -593,7 +605,15 @@ def value_optimization_tester_one(trader_to_use: Trader,
     profits = []
     params = []
 
-    for param1 in np.arange(param1_min, param1_max + param1_step, param1_step):
+    num_of_iterations = int((param1_max - param1_min) / param1_step + 1)
+    counter = 0
+
+    for param1 in np.arange(param1_min, param1_max, param1_step):
+
+        print("##########################################################")
+        print("Iteration Number: ", counter, " out of ", num_of_iterations)
+        print("##########################################################")
+
         curr_params = [param1]
         params.append(curr_params)
 
@@ -601,11 +621,13 @@ def value_optimization_tester_one(trader_to_use: Trader,
         for day in [1, 2, 3]:
             result = simulate_alternative(rnd_inp,
                                           day,
+                                          time_inp,
                                           trader_to_use,
                                           time_inp,
                                           names_inp,
+                                          halfway_inp,
                                           False,
-                                          False,
+                                          [],
                                           curr_params[0])
 
             if product == 'CPC':
@@ -617,6 +639,8 @@ def value_optimization_tester_one(trader_to_use: Trader,
                 curr_profit = result[time_inp][product]
 
             curr_profits.append(curr_profit)
+
+        counter += 1
 
         avg_profit = np.mean(curr_profits)
         profits.append(avg_profit)
@@ -641,19 +665,31 @@ def value_optimization_tester_two(trader_to_use: Trader,
     profits = []
     params = []
 
-    for param1 in np.arange(param1_min, param1_max + param1_step, param1_step):
-        for param2 in np.arange(param2_min, param2_max + param2_step, param2_step):
+    num_of_iterations = int((param1_max - param1_min) / param1_step + 1) * \
+        int((param2_max - param2_min) / param2_step + 1)
+    counter = 0
+
+    for param1 in np.arange(param1_min, param1_max, param1_step):
+        for param2 in np.arange(param2_min, param2_max, param2_step):
+
+            print("##########################################################")
+            print("Iteration Number: ", counter, " out of ", num_of_iterations)
+            print("##########################################################")
+
             curr_params = [param1, param2]
             params.append(curr_params)
 
             curr_profits = []
             for day in [1, 2, 3]:
-                result = simulate_alternative(rnd_inp, day,
+                result = simulate_alternative(rnd_inp,
+                                              day,
+                                              time_inp,
                                               trader_to_use,
                                               time_inp,
                                               names_inp,
+                                              halfway_inp,
                                               False,
-                                              False,
+                                              [],
                                               curr_params[0],
                                               curr_params[1])
 
@@ -666,6 +702,8 @@ def value_optimization_tester_two(trader_to_use: Trader,
                     curr_profit = result[time_inp][product]
 
                 curr_profits.append(curr_profit)
+
+            counter += 1
 
             avg_profit = np.mean(curr_profits)
             profits.append(avg_profit)
@@ -693,20 +731,33 @@ def value_optimization_tester_three(trader_to_use: Trader,
     profits = []
     params = []
 
-    for param1 in np.arange(param1_min, param1_max + param1_step, param1_step):
-        for param2 in np.arange(param2_min, param2_max + param2_step, param2_step):
-            for param3 in np.arange(param3_min, param3_max + param3_step, param3_step):
+    num_of_iterations = int((param1_max - param1_min) / param1_step + 1) * \
+        int((param2_max - param2_min) / param2_step + 1) * \
+        int((param3_max - param3_min) / param3_step + 1)
+    counter = 0
+
+    for param1 in np.arange(param1_min, param1_max, param1_step):
+        for param2 in np.arange(param2_min, param2_max, param2_step):
+            for param3 in np.arange(param3_min, param3_max, param3_step):
+
+                print("##########################################################")
+                print("Iteration Number: ", counter, " out of ", num_of_iterations)
+                print("##########################################################")
+
                 curr_params = [param1, param2, param3]
                 params.append(curr_params)
 
                 curr_profits = []
                 for day in [1, 2, 3]:
-                    result = simulate_alternative(rnd_inp, day,
+                    result = simulate_alternative(rnd_inp,
+                                                  day,
+                                                  time_inp,
                                                   trader_to_use,
                                                   time_inp,
                                                   names_inp,
+                                                  halfway_inp,
                                                   False,
-                                                  False,
+                                                  [],
                                                   curr_params[0],
                                                   curr_params[1],
                                                   curr_params[2])
@@ -720,6 +771,8 @@ def value_optimization_tester_three(trader_to_use: Trader,
                         curr_profit = result[time_inp][product]
 
                     curr_profits.append(curr_profit)
+
+                counter += 1
 
                 avg_profit = np.mean(curr_profits)
                 profits.append(avg_profit)
@@ -790,4 +843,4 @@ if __name__ == "__main__":
     else:
         print(f"Running simulation on round {rnd_inp} day {day_inp} for time {time_inp}")
         print("Remember to change the trader import")
-        simulate_alternative(rnd_inp, day_inp, trader_val, time_inp, names_inp, halfway_inp)
+        simulate_alternative(rnd_inp, day_inp, time_inp, trader_val, time_inp, names_inp, halfway_inp)

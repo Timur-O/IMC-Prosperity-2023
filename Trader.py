@@ -125,6 +125,7 @@ class Trader:
             self.historicalBestBid[product].append(sorted_bids[0])
 
         if num_sell > 0 and num_buy > 0:
+            # noinspection PyTypeChecker
             avg_price: float = np.mean([self.historicalBestBid[product][-1], self.historicalBestAsk[product][-1]])
             self.historicalPrice[product].append(avg_price)
 
@@ -229,6 +230,7 @@ class Trader:
 
             # Gradient of OBV
             obv_gradient: float = np.gradient(historicalOBV)[-1]
+            # noinspection PyTypeChecker
             obv_average: float = np.mean(historicalOBV[-amount_of_history:])
 
             # Imbalance > 1 => Price Up, Current OBV Gradient > OBV Average => BUY
@@ -317,7 +319,9 @@ class Trader:
                 historical_ratios: list = self.historicalPairRatios[both_products][-amount_of_history:]
 
                 # Calculate historical values
+                # noinspection PyTypeChecker
                 ratio_average: float = np.mean(historical_ratios)
+                # noinspection PyTypeChecker
                 ratio_std: float = np.std(historical_ratios)
 
                 # Calculate z-score
@@ -372,8 +376,10 @@ class Trader:
 
         # Ensure there is enough historical data
         if len(historicalObservations) >= amount_of_time_for_history:
+            # noinspection PyTypeChecker
             moving_average: float = np.mean(historicalObservations[-amount_of_time_for_history:])
             curr_observations: List[float] = historicalObservations[-amount_of_time_for_present:]
+            # noinspection PyTypeChecker
             standard_deviation: float = np.std(np.subtract(curr_observations, moving_average))
 
             if (num_sell > 0) and (position < limit):
@@ -584,7 +590,6 @@ class Trader:
         else:
             # Exit Position
             return -position1, -position2, -position3, -position4
-
 
     def run(self,
             state: TradingState,
