@@ -1,11 +1,11 @@
 # IMC Prosperity
 
----
+Code from IMC Prosperity competition 2023, although at the moment all of the strategies (except simple arbitrage and time-based) are losing money. Why? No idea. I'll figure it out someday.
+
 ## Ideas:
 * Avellaneda & Stoikov Market-Making Strategy
 * Counter-Party Tracking / Insights
 
----
 ## Implemented:
 
 #### PEARLS:
@@ -38,7 +38,7 @@
    * Statistical Arbitrage:
      * Buying Combined Cheaper => Sell Each Separately
      * Buying Separate Cheaper => Sell Combined
----
+     
 ## Backtesting Hyper-Parameter Optimization Results:
 
 #### BANANAS:
