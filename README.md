@@ -3,6 +3,7 @@
 ---
 ## Ideas:
 * Avellaneda & Stoikov Market-Making Strategy
+* Counter-Party Tracking / Insights
 
 ---
 ## Implemented:
@@ -37,13 +38,49 @@
    * Statistical Arbitrage:
      * Buying Combined Cheaper => Sell Each Separately
      * Buying Separate Cheaper => Sell Combined
-
 ---
-CPC:
-Simulation on round 4 day 1 for time 99000 complete
-Best Params:  [2.0, 1.0, 500.0]
-Max Profit:  13678.0
+## Backtesting Hyper-Parameter Optimization Results:
 
-Bananas:
-Best Params:  [0.0]
-Max Profit:  18950.5
+#### BANANAS:
+- Round 4, Day 1:
+  * Best set of hyper-parameters:  [1.3188359288875715, 9710]
+  * Best objective function value:  -1080.0
+- Round 4, Day 2:
+  * Best set of hyper-parameters:  [1.9382348151126094, 4067]
+  * Best objective function value:  -676.0
+- Round 4, Day 3:
+  * Best set of hyper-parameters:  [0.1386060490952874, 861]
+  * Best objective function value:  -1010.0
+
+#### CPC:
+- Round 4, Day 1:
+  * Best set of hyper-parameters:  [0.5802234262316439, 1.2285591499542938, 961]
+  * Best objective function value:  -342728.0
+- Round 4, Day 2:
+  * Best set of hyper-parameters:  [0.1, 0.644863499540242, 500]
+  * Best objective function value:  -399616.0
+- Round 4, Day 3:
+  * Best set of hyper-parameters:  [0.1, 0.36020125424758764, 500]
+  * Best objective function value:  -373980.0
+
+#### DIVING_GEAR:
+- Round 4, Day 1:
+  * Best set of hyper-parameters:  [1, 4245, 3424]
+  * Best objective function value:  -14252.0
+- Round 4, Day 2:
+  * Best set of hyper-parameters:  [2, 3050, 6532]
+  * Best objective function value:  -48454.0
+- Round 4, Day 3:
+  * Best set of hyper-parameters:  [3, 2786, 3759]
+  * Best objective function value:  -8075.0
+
+#### BDUP:
+- Round 4, Day 1:
+  * Best set of hyper-parameters:  [78113]
+  * Best objective function value:  0.0
+- Round 4, Day 2:
+  * Best set of hyper-parameters:  [419]
+  * Best objective function value:  -439566.0
+- Round 4, Day 3:
+  * Best set of hyper-parameters:  [396]
+  * Best objective function value:  -303060.0

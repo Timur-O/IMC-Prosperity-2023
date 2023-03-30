@@ -629,33 +629,34 @@ class Trader:
         amounts['PEARLS'] = self.calculate_arbitrage_amount('PEARLS', 10000.00, state)
 
         # Simple Price Direction Indication via Order Book for Bananas
-        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 2, 0, state)
+        amounts['BANANAS'] = self.calculate_price_direction_amount('BANANAS', 1.62853537200009045, 4879, state)
 
         # Pair Trading w/ Z-Score for Coconuts and Pina Coladas
         amounts['COCONUTS'], amounts['PINA_COLADAS'] = self.calculate_pair_trading_amounts('COCONUTS',
                                                                                            'PINA_COLADAS',
-                                                                                           1,
-                                                                                           2,
-                                                                                           600,
+                                                                                           0.2600744754105479666666667,
+                                                                                           0.74454130124737448,
+                                                                                           654,
                                                                                            state)
 
-        # Time-Based Trading for Mayberries
+        # Time-Based Trading for May-Berries
         amounts['BERRIES'] = self.calculate_time_based_amount('BERRIES', 132000, 504000, state)
 
         # Mean Reversion Based Tracking on Dolphin Sightings to Calculate Price of Diving Gear
         amounts['DIVING_GEAR'] = self.calculate_mean_reversion_amount('DOLPHIN_SIGHTINGS',
                                                                       'DIVING_GEAR',
                                                                       2,
-                                                                      50,
-                                                                      150,
+                                                                      3360,
+                                                                      4572,
                                                                       state)
 
+        # Statistical Arbitrage for Baguettes, Dips, Ukuleles, and Picnic Baskets
         amounts['BAGUETTE'], amounts['DIP'], amounts['UKULELE'], amounts['PICNIC_BASKET'] = \
             self.calculate_statistical_arbitrage_amount('BAGUETTE',
                                                         'DIP',
                                                         'UKULELE',
                                                         'PICNIC_BASKET',
-                                                        100,
+                                                        408,
                                                         state)
 
         # Make purchases for each product based on previously calculated amounts
